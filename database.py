@@ -1,5 +1,8 @@
 import os
-from sqlalchemy import (Column, Integer, String, Text, Boolean, DateTime, ForeignKey, func)
+from sqlalchemy import (
+    Column, Integer, String, Text, Boolean, DateTime,
+    ForeignKey, func
+)
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
@@ -8,7 +11,7 @@ engine = create_async_engine(os.getenv("DATABASE_URL"), future=True)
 SessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 class User(Base):
-    tablename = "users"
+    __tablename__ = "users"
     user_id = Column(Integer, primary_key=True)
     name = Column(String, nullable=True)
     contact = Column(String, nullable=True)
@@ -19,7 +22,7 @@ class User(Base):
     payouts_hist = relationship("Payout", back_populates="user")
 
 class Application(Base):
-    tablename = "applications"
+    __tablename__ = "applications"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.user_id"))
     message = Column(Text)
@@ -30,7 +33,7 @@ class Application(Base):
     user = relationship("User", back_populates="applications")
 
 class Payout(Base):
-    tablename = "payouts"
+    __tablename__ = "payouts"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.user_id"))
     amount = Column(Integer)
@@ -39,7 +42,7 @@ class Payout(Base):
     user = relationship("User", back_populates="payouts_hist")
 
 class News(Base):
-    tablename = "news"
+    __tablename__ = "news"
     id = Column(Integer, primary_key=True)
     content = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
