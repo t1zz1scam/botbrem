@@ -38,9 +38,9 @@ async def handle_webhook(request: web.Request):
     try:
         data = await request.json()
         logging.info(f"Webhook Update: {data}")
-        update = types.Update.parse_obj(data)
+        update = types.Update(**data)
         logging.info("До вызова feed_update")
-        await dp.feed_update(bot, update)  # ВАЖНО: feed_update принимает bot и update
+        await dp.feed_update(bot, update)
         logging.info("После вызова feed_update")
     except Exception as e:
         logging.error(f"Ошибка при обработке webhook: {e}")
