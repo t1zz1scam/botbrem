@@ -1,80 +1,71 @@
-from aiogram import types
-from aiogram.fsm.context import FSMContext
-from sqlalchemy import select
 import asyncio
+from aiogram import Bot, Dispatcher, Router, types, F
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import Message, CallbackQuery
+from aiogram.enums import ParseMode
+from aiogram.fsm.state import State, StatesGroup
 
-from config import CHANNEL_IDS
-from database import SessionLocal, init_db, News, Payout, User
-from loader import dp, bot
-from states import PayoutForm
+from config import BOT_TOKEN, SUPER_ADMINS
+from keyboards import main_menu, admin_panel_kb
 
-# --- Публикация поста ---
-@dp.message_handler(commands=["post_news"])
-async def post_news_handler(message: types.Message, state: FSMContext):
-    async with SessionLocal() as s:
-        s.add(News(content=message.text))
-        await s.commit()
+# Инициализация бота и диспетчера
+bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+dp = Dispatcher(storage=MemoryStorage())
+router = Router()
 
-    for ch in CHANNEL_IDS:
-        await bot.send_message(ch, message.text)
+# Состояния FSM
+class ApplyForm(StatesGroup):
+    waiting_for_application = State()
 
-    await message.answer("Пост опубликован.")
+# Старт
+@router.message(F.text == "/start")
+async def start_cmd(message: Message):
+    user_id = message.from_user.id
+    role = "admin" if user_id in SUPER_ADMINS else "user"
+    await message.answer("Добро пожаловать!", reply_markup=main_menu(role))
+
+# Подать заявку
+@router.message(F.text == "📋 Подать заявку")
+async def apply_start(message: Message, state: FSMContext):
+    await state.set_state(ApplyForm.waiting_for_application)
+    await message.answer("Напиши текст своей заявки:")
+
+@router.message(ApplyForm.waiting_for_application)
+async def apply_process(message: Message, state: FSMContext):
+    await message.answer("Заявка отправлена. Ожидай ответа.")
     await state.clear()
 
+# Админ-панель
+@router.message(F.text == "🛠 Админ-панель")
+async def admin_panel(message: Message):
+    if message.from_user.id not in SUPER_ADMINS:
+        return await message.answer("Нет доступа.")
+    await message.answer("Панель администратора:", reply_markup=admin_panel_kb)
 
-# --- Выплаты ---
-@dp.callback_query(lambda c: c.data == "manage_payouts")
-async def payout_req(call: types.CallbackQuery, state: FSMContext):
-    await call.message.answer("ID пользователя:")
-    await state.set_state(PayoutForm.waiting_for_user_id)
+# Кнопки админки
+@router.callback_query(F.data == "view_stats")
+async def view_stats(call: CallbackQuery):
+    await call.message.edit_text(
+        "👥 Пользователи: 42\n📬 Заявки: 12\n💸 Выплачено: 14900₽"
+    )
 
+@router.callback_query(F.data == "post_to_channels")
+async def post_to_channels(call: CallbackQuery, state: FSMContext):
+    await call.message.answer("Введите текст для поста:")
+    # Здесь можно использовать FSM для ожидания текста
 
-@dp.message(PayoutForm.waiting_for_user_id)
-async def payout_id(message: types.Message, state: FSMContext):
-    await state.update_data(user_id=int(message.text))
-    await message.answer("Сумма:")
-    await state.set_state(PayoutForm.waiting_for_amount)
-
-
-@dp.message(PayoutForm.waiting_for_amount)
-async def payout_amt(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    async with SessionLocal() as s:
-        payout = Payout(
-            user_id=data['user_id'],
-            amount=int(message.text),
-            issued_by=message.from_user.id
-        )
-        s.add(payout)
-        user = await s.get(User, data['user_id'])
-        user.payout += int(message.text)
-        await s.commit()
-
-    await message.answer("Выплата проведена.")
-    await state.clear()
-
-
-# --- Автопостинг новостей каждые 3600 секунд ---
+# Автопостинг новостей
 async def auto_post_news():
     while True:
         await asyncio.sleep(3600)
-        async with SessionLocal() as s:
-            q = await s.execute(select(News).filter_by(sent=False))
-            for n in q.scalars():
-                for ch in CHANNEL_IDS:
-                    await bot.send_message(ch, n.content)
-                n.sent = True
-            await s.commit()
+        # TODO: автопостинг логика
 
-
-# --- Основная точка входа ---
+# Запуск бота
 async def main():
-    await init_db()
-    asyncio.create_task(auto_post_news())  # используем asyncio.create_task вместо loop
-    from aiogram import executor
-    executor.start_polling(dp, skip_updates=True)
+    dp.include_router(router)
+    asyncio.create_task(auto_post_news())
+    await dp.start_polling(bot)
 
-
-# --- Запуск ---
-if name == "__main__":  # <-- исправлено имя переменной
+if __name__ == "__main__":
     asyncio.run(main())
