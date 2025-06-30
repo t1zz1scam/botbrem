@@ -8,7 +8,7 @@ from aiogram.enums import ParseMode
 from config import BOT_TOKEN, SUPER_ADMINS
 from keyboards import main_menu, admin_panel_kb
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 PORT = int(os.getenv("PORT", 8000))
 WEBHOOK_PATH = "/webhook"
@@ -26,7 +26,7 @@ async def start_cmd(message: types.Message):
     await message.answer("Добро пожаловать!", reply_markup=main_menu(role))
     logging.info("Ответ на /start отправлен")
 
-# Добавь эхо-обработчик для проверки, что бот отвечает на любое сообщение
+# Эхо-обработчик для проверки, что бот отвечает на любое сообщение
 @router.message()
 async def echo_all(message: types.Message):
     logging.info(f"Эхо: получено сообщение: {message.text}")
@@ -39,9 +39,9 @@ async def handle_webhook(request: web.Request):
         data = await request.json()
         logging.info(f"Webhook Update: {data}")
         update = types.Update.parse_obj(data)
-        logging.info("До вызова process_update")
-        await dp.process_update(update)
-        logging.info("После вызова process_update")
+        logging.info("До вызова feed_update")
+        await dp.feed_update(bot, update)  # ВАЖНО: feed_update принимает bot и update
+        logging.info("После вызова feed_update")
     except Exception as e:
         logging.error(f"Ошибка при обработке webhook: {e}")
     return web.Response()
