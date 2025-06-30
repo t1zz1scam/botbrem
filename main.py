@@ -70,10 +70,11 @@ async def handle_webhook(request: web.Request):
         data = await request.json()
         logging.info(f"Webhook Update: {data}")
         update = types.Update.parse_obj(data)
-        await dp.feed_update(update)  # <- Важно: только один аргумент
+        await dp.feed_update(bot, update)  # bot — обязательный первый аргумент!
     except Exception as e:
         logging.error(f"Ошибка при обработке webhook: {e}")
     return web.Response()
+
 
 async def on_startup(app):
     await bot.set_webhook(WEBHOOK_URL)
