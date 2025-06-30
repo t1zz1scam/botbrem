@@ -1,11 +1,3 @@
-from aiogram import executor, types
-from aiogram.fsm.context import FSMContext
-from sqlalchemy import select
-import asyncio
-
-# Предположим, что ты импортировал нужные вещи:
-# - SessionLocal, News, CHANNEL_IDS, bot, init_db, dp, state, message — они должны быть доступны
-
 # Хендлер публикации новости
 @dp.message_handler(commands=["post_news"])  # или замени на свой триггер
 async def post_news_handler(message: types.Message, state: FSMContext):
