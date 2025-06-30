@@ -64,7 +64,7 @@ dp.include_router(router)
 async def handle_webhook(request: web.Request):
     data = await request.json()
     update = types.Update(**data)
-    await dp.process_update(update)
+    await dp.feed_update(update)  # Обновлено здесь
     return web.Response()
 
 async def on_startup(app):
