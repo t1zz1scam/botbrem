@@ -1,7 +1,7 @@
 async with SessionLocal() as s:
         s.add(News(content=message.text))
         await s.commit()
-    for ch in CHANNEL_IDS:
+for ch in CHANNEL_IDS:
         await bot.send_message(ch, message.text)
     await message.answer("Пост опубликован.")
     await state.clear()
