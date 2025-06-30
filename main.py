@@ -3,7 +3,6 @@ import asyncio
 import logging
 from aiohttp import web
 from aiogram import Bot, Dispatcher, Router, types, F
-from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message, CallbackQuery
@@ -26,7 +25,7 @@ router = Router()
 class ApplyForm(StatesGroup):
     waiting_for_application = State()
 
-@router.message(Command("start"))
+@router.message(F.text == "/start")
 async def start_cmd(message: Message):
     logging.info(f"Получена команда /start от {message.from_user.id}")
     user_id = message.from_user.id
@@ -71,7 +70,7 @@ async def handle_webhook(request: web.Request):
         data = await request.json()
         logging.info(f"Webhook Update: {data}")
         update = types.Update.parse_obj(data)
-        await dp.feed_update(bot, update)
+        await dp.feed_update(update)  # Важно: только один аргумент
     except Exception as e:
         logging.error(f"Ошибка при обработке webhook: {e}")
     return web.Response()
