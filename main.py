@@ -74,11 +74,22 @@ async def on_shutdown(app):
     await bot.delete_webhook()
     await bot.session.close()
 
+async def start_background_tasks(app):
+    app['auto_post_task'] = asyncio.create_task(auto_post_news())
+
+async def cleanup_background_tasks(app):
+    app['auto_post_task'].cancel()
+    try:
+        await app['auto_post_task']
+    except asyncio.CancelledError:
+        pass
+
 app = web.Application()
 app.router.add_post(WEBHOOK_PATH, handle_webhook)
 app.on_startup.append(on_startup)
+app.on_startup.append(start_background_tasks)
+app.on_cleanup.append(cleanup_background_tasks)
 app.on_cleanup.append(on_shutdown)
 
 if __name__ == "__main__":
-    asyncio.create_task(auto_post_news())
     web.run_app(app, host="0.0.0.0", port=PORT)
