@@ -71,8 +71,8 @@ async def handle_webhook(request: web.Request):
     try:
         data = await request.json()
         logging.info(f"Webhook Update: {data}")
-        update = types.Update(**data)
-        await dp.feed_update(bot=bot, update=update)
+        update = types.Update.model_validate(data)
+        await dp.feed_update(bot, update)
     except Exception as e:
         logging.error(f"Ошибка при обработке webhook: {e}")
     return web.Response()
