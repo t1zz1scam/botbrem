@@ -1,3 +1,4 @@
+import os
 from sqlalchemy import (Column, Integer, String, Text, Boolean, DateTime, ForeignKey, func)
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
