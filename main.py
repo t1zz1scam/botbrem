@@ -7,7 +7,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message, CallbackQuery
 from aiogram.enums import ParseMode
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types.bot import DefaultBotProperties
 
 from config import BOT_TOKEN, SUPER_ADMINS
 from keyboards import main_menu, admin_panel_kb
@@ -16,7 +15,7 @@ PORT = int(os.getenv("PORT", 8000))
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = "https://botbrem.onrender.com/webhook"
 
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher(storage=MemoryStorage())
 router = Router()
 
