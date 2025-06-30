@@ -12,7 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from config import BOT_TOKEN, SUPER_ADMINS
 from keyboards import main_menu, admin_panel_kb
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)  # Для подробных логов
 
 PORT = int(os.getenv("PORT", 8000))
 WEBHOOK_PATH = "/webhook"
@@ -25,11 +25,10 @@ router = Router()
 class ApplyForm(StatesGroup):
     waiting_for_application = State()
 
-@router.message(F.text == "/start")
+@router.message(F.command == "start")
 async def start_cmd(message: Message):
     logging.info(f"Получена команда /start от {message.from_user.id}")
-    user_id = message.from_user.id
-    role = "admin" if user_id in SUPER_ADMINS else "user"
+    role = "admin" if message.from_user.id in SUPER_ADMINS else "user"
     await message.answer("Добро пожаловать!", reply_markup=main_menu(role))
 
 @router.message(F.text == "📋 Подать заявку")
@@ -55,13 +54,14 @@ async def view_stats(call: CallbackQuery):
     )
 
 @router.callback_query(F.data == "post_to_channels")
-async def post_to_channels(call: CallbackQuery, state: FSMContext):
+async def post_to_channels(call: CallbackQuery):
     await call.message.answer("Введите текст для поста:")
 
-async def auto_post_news():
-    while True:
-        await asyncio.sleep(3600)
-        # TODO: автопостинг логика
+# Простой эхо-обработчик для проверки, что бот работает
+@router.message()
+async def echo_all(message: Message):
+    logging.info(f"Эхо: получено сообщение: {message.text}")
+    await message.answer(f"Вы написали: {message.text}")
 
 dp.include_router(router)
 
@@ -70,7 +70,7 @@ async def handle_webhook(request: web.Request):
         data = await request.json()
         logging.info(f"Webhook Update: {data}")
         update = types.Update.parse_obj(data)
-        await dp.feed_update(bot, update)
+        await dp.feed_update(update)  # <- Важно: только один аргумент
     except Exception as e:
         logging.error(f"Ошибка при обработке webhook: {e}")
     return web.Response()
@@ -82,21 +82,9 @@ async def on_shutdown(app):
     await bot.delete_webhook()
     await bot.session.close()
 
-async def start_background_tasks(app):
-    app['auto_post_task'] = asyncio.create_task(auto_post_news())
-
-async def cleanup_background_tasks(app):
-    app['auto_post_task'].cancel()
-    try:
-        await app['auto_post_task']
-    except asyncio.CancelledError:
-        pass
-
 app = web.Application()
 app.router.add_post(WEBHOOK_PATH, handle_webhook)
 app.on_startup.append(on_startup)
-app.on_startup.append(start_background_tasks)
-app.on_cleanup.append(cleanup_background_tasks)
 app.on_cleanup.append(on_shutdown)
 
 if __name__ == "__main__":
