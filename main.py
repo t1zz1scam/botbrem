@@ -3,14 +3,13 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy import select
 import asyncio
 
-# Предположим, что у тебя есть эти импорты:
-# from config import CHANNEL_IDS
-# from database import SessionLocal, init_db, News, Payout, User
-# from loader import dp, bot
-# from states import PayoutForm
+from config import CHANNEL_IDS
+from database import SessionLocal, init_db, News, Payout, User
+from loader import dp, bot
+from states import PayoutForm
 
-# Функция публикации поста
-@dp.message_handler(commands=["post_news"])  # или другой хендлер
+# --- Публикация поста ---
+@dp.message_handler(commands=["post_news"])
 async def post_news_handler(message: types.Message, state: FSMContext):
     async with SessionLocal() as s:
         s.add(News(content=message.text))
@@ -23,7 +22,7 @@ async def post_news_handler(message: types.Message, state: FSMContext):
     await state.clear()
 
 
-# Выплаты
+# --- Выплаты ---
 @dp.callback_query(lambda c: c.data == "manage_payouts")
 async def payout_req(call: types.CallbackQuery, state: FSMContext):
     await call.message.answer("ID пользователя:")
@@ -55,7 +54,7 @@ async def payout_amt(message: types.Message, state: FSMContext):
     await state.clear()
 
 
-# Автопостинг новостей каждые 3600 секунд
+# --- Автопостинг новостей каждые 3600 секунд ---
 async def auto_post_news():
     while True:
         await asyncio.sleep(3600)
@@ -68,15 +67,14 @@ async def auto_post_news():
             await s.commit()
 
 
-# Основная точка входа
+# --- Основная точка входа ---
 async def main():
     await init_db()
-    loop = asyncio.get_event_loop()
-    loop.create_task(auto_post_news())
+    asyncio.create_task(auto_post_news())  # используем asyncio.create_task вместо loop
     from aiogram import executor
     executor.start_polling(dp, skip_updates=True)
 
 
-# Запуск
-if name == "__main__":
+# --- Запуск ---
+if name == "__main__":  # <-- исправлено имя переменной
     asyncio.run(main())
