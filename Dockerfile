@@ -1,24 +1,20 @@
 FROM python:3.11-slim
 
-# Устанавливаем рабочую директорию
-WORKDIR /app
+# Установка зависимостей системы
+RUN apt-get update && apt-get install -y gcc build-essential libffi-dev python3-dev curl tzdata && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем зависимости ОС (оставим только нужное)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libffi-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
 # Обновляем pip
 RUN pip install --upgrade pip
 
-# Копируем зависимости и устанавливаем
+# Устанавливаем зависимости Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем приложение
+# Копируем весь проект
 COPY . .
 
-# Запуск FastAPI-приложения через Uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000"]
+# Запускаем через uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
