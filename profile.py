@@ -1,6 +1,7 @@
 from aiogram import Router, types, F
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from database import get_user_by_id, update_user_name, update_user_wallet, get_top_users, get_total_earned_today, SessionLocal, Application
 
@@ -22,6 +23,21 @@ def profile_kb():
         [InlineKeyboardButton(text="📋 Подать заявку", callback_data="apply")]
     ])
 
+main_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="👤 Профиль")],
+        [KeyboardButton(text="📋 Подать заявку")],
+    ],
+    resize_keyboard=True
+)
+
+@router.message(CommandStart())
+async def cmd_start(message: types.Message):
+    await message.answer(
+        "👋 Привет! Добро пожаловать в бота.\nВыберите действие ниже:",
+        reply_markup=main_menu
+    )
+
 @router.message(F.text == "👤 Профиль")
 async def profile(message: types.Message):
     user_id = message.from_user.id
@@ -39,7 +55,7 @@ async def profile(message: types.Message):
 @router.callback_query(F.data == "edit_name")
 async def edit_name_handler(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer("Введите новое имя:")
-    await state.set_state(EditProfile.name)  # Правильно ставим состояние
+    await state.set_state(EditProfile.name)
     await callback.answer()
 
 @router.message(EditProfile.name)
@@ -51,7 +67,7 @@ async def save_new_name(message: types.Message, state: FSMContext):
 @router.callback_query(F.data == "edit_wallet")
 async def edit_wallet_handler(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer("Введите новый адрес кошелька:")
-    await state.set_state(EditProfile.wallet)  # Правильно ставим состояние
+    await state.set_state(EditProfile.wallet)
     await callback.answer()
 
 @router.message(EditProfile.wallet)
@@ -82,7 +98,7 @@ async def total_today(callback: types.CallbackQuery):
 @router.message(F.text == "📋 Подать заявку")
 async def start_application(message: types.Message, state: FSMContext):
     await message.answer("Опишите вашу заявку, пожалуйста:")
-    await state.set_state(ApplicationForm.message)  # Исправлено: правильный вызов
+    await state.set_state(ApplicationForm.message)
 
 @router.message(ApplicationForm.message)
 async def save_application(message: types.Message, state: FSMContext):
