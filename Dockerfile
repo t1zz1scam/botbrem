@@ -1,19 +1,24 @@
 FROM python:3.11-slim
 
+# Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Устанавливаем необходимые пакеты для сборки и компиляции
-RUN apt-get update && apt-get install -y gcc build-essential libffi-dev python3-dev
+# Устанавливаем зависимости ОС (оставим только нужное)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libffi-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Обновляем pip до последней версии
+# Обновляем pip
 RUN pip install --upgrade pip
 
-# Копируем файл зависимостей и устанавливаем их
+# Копируем зависимости и устанавливаем
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем остальной код приложения
+# Копируем приложение
 COPY . .
 
-# Запускаем главный файл бота
-CMD ["python", "main.py"]
+# Запуск FastAPI-приложения через Uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000"]
