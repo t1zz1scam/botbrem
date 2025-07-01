@@ -4,3 +4,10 @@ pydantic==1.10.9
 python-dotenv
 sqlalchemy
 asyncpg
+fastapi
+uvicorn[standard]
+aiohttp
+aiohttp-asgi
+aiogram
+sqlalchemy
+asyncpg
