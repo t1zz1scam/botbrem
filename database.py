@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timedelta
 from sqlalchemy import (
-    Column, Integer, String, Text, Boolean, DateTime,
+    Column, Integer, BigInteger, String, Text, Boolean, DateTime,
     ForeignKey, func, select, update, desc
 )
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -13,7 +13,7 @@ SessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 class User(Base):
     __tablename__ = "users"
-    user_id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, primary_key=True)
     name = Column(String, nullable=True)
     contact = Column(String, nullable=True)
     role = Column(String, default="user")
@@ -25,20 +25,20 @@ class User(Base):
 class Application(Base):
     __tablename__ = "applications"
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"))
+    user_id = Column(BigInteger, ForeignKey("users.user_id"))
     message = Column(Text)
     status = Column(String, default="pending")
     created_at = Column(DateTime, server_default=func.now())
-    resolved_by = Column(Integer, nullable=True)
+    resolved_by = Column(BigInteger, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
     user = relationship("User", back_populates="applications")
 
 class Payout(Base):
     __tablename__ = "payouts"
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"))
+    user_id = Column(BigInteger, ForeignKey("users.user_id"))
     amount = Column(Integer)
-    issued_by = Column(Integer)
+    issued_by = Column(BigInteger)
     created_at = Column(DateTime, server_default=func.now())
     user = relationship("User", back_populates="payouts_hist")
 
@@ -53,7 +53,8 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-# Функции для профиля и работы с БД (оставляй без изменений)
+# Функции для профиля
+
 async def get_user_by_id(user_id):
     async with SessionLocal() as session:
         result = await session.execute(select(User).where(User.user_id == user_id))
