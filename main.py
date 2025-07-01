@@ -12,15 +12,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
+if not API_TOKEN:
+    raise RuntimeError("BOT_TOKEN env variable is not set")
+
 WEBHOOK_PATH = "/bot-webhook"
 
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 if not WEBHOOK_URL:
-    raise RuntimeError("WEBHOOK_URL environment variable is not set")
-FULL_WEBHOOK_URL = WEBHOOK_URL + WEBHOOK_PATH
+    raise RuntimeError("WEBHOOK_URL env variable is not set")
 
-WEBAPP_HOST = "0.0.0.0"
-WEBAPP_PORT = int(os.getenv("PORT", 3000))
+FULL_WEBHOOK_URL = WEBHOOK_URL + WEBHOOK_PATH
 
 bot = Bot(token=API_TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
@@ -57,5 +58,5 @@ async def on_shutdown():
 async def bot_webhook(request: Request):
     json_data = await request.json()
     update = Update(**json_data)
-    await dp.process_update(update)  # исправлено feed_update -> process_update
+    await dp.feed_update(bot, update)  # <- Важно: передаем bot и update
     return Response(status_code=200)
