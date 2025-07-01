@@ -26,12 +26,6 @@ async def start_cmd(message: types.Message):
     await message.answer("Добро пожаловать!", reply_markup=main_menu(role))
     logging.info("Ответ на /start отправлен")
 
-# Эхо-обработчик для проверки, что бот отвечает на любое сообщение
-@router.message()
-async def echo_all(message: types.Message):
-    logging.info(f"Эхо: получено сообщение: {message.text}")
-    await message.answer(f"Вы написали: {message.text}")
-
 dp.include_router(router)
 
 async def handle_webhook(request: web.Request):
