@@ -12,7 +12,12 @@ logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_PATH = "/bot-webhook"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL") + WEBHOOK_PATH
+
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+if not WEBHOOK_URL:
+    raise RuntimeError("WEBHOOK_URL environment variable is not set")
+WEBHOOK_URL += WEBHOOK_PATH
+
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = int(os.getenv("PORT", 3000))
 
@@ -20,7 +25,6 @@ bot = Bot(token=API_TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# Подключаем роутеры
 dp.include_router(profile_router)
 dp.include_router(admin_router)
 
