@@ -1,9 +1,9 @@
 import os
 import logging
+from fastapi import FastAPI, Request, Response
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand
-from aiogram.utils.executor import start_webhook
+from aiogram.types import BotCommand, Update
 from database import init_db
 from profile import router as profile_router
 from admin import router as admin_router
@@ -24,6 +24,9 @@ dp = Dispatcher(storage=storage)
 dp.include_router(profile_router)
 dp.include_router(admin_router)
 
+app = FastAPI()
+
+@app.on_event("startup")
 async def on_startup():
     logging.info("Инициализация базы данных...")
     await init_db()
@@ -38,6 +41,7 @@ async def on_startup():
     await bot.set_my_commands(commands)
     logging.info("Команды бота установлены")
 
+@app.on_event("shutdown")
 async def on_shutdown():
     logging.info("Удаляем webhook...")
     await bot.delete_webhook()
@@ -45,13 +49,9 @@ async def on_shutdown():
     await storage.wait_closed()
     logging.info("Шатдаун завершен")
 
-if __name__ == "__main__":
-    start_webhook(
-        dispatcher=dp,
-        webhook_path=WEBHOOK_PATH,
-        on_startup=on_startup,
-        on_shutdown=on_shutdown,
-        skip_updates=True,
-        host=WEBAPP_HOST,
-        port=WEBAPP_PORT,
-    )
+@app.post(WEBHOOK_PATH)
+async def bot_webhook(request: Request):
+    json_data = await request.json()
+    update = Update(**json_data)
+    await dp.process_update(update)
+    return Response(status_code=200)
