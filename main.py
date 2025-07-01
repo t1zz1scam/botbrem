@@ -7,6 +7,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.enums import ParseMode
 from config import BOT_TOKEN, SUPER_ADMINS
 from keyboards import main_menu, admin_panel_kb
+from profile import router as profile_router
+app.include_router(profile_router)
 
 logging.basicConfig(level=logging.INFO)
 
