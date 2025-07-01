@@ -3,13 +3,10 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.utils.executor import start_webhook
 from database import init_db
 from profile import router as profile_router
 from admin import router as admin_router
-from aiogram.utils.executor import start_webhook
 
 logging.basicConfig(level=logging.INFO)
 
@@ -23,15 +20,16 @@ bot = Bot(token=API_TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# Регистрируем роутеры
+# Подключаем роутеры
 dp.include_router(profile_router)
 dp.include_router(admin_router)
 
 async def on_startup():
     logging.info("Инициализация базы данных...")
     await init_db()
+
+    logging.info(f"Установка webhook: {WEBHOOK_URL}")
     await bot.set_webhook(WEBHOOK_URL)
-    logging.info(f"Webhook установлен: {WEBHOOK_URL}")
 
     commands = [
         BotCommand(command="start", description="Запустить бота"),
