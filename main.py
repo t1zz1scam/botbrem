@@ -57,5 +57,5 @@ async def on_shutdown():
 async def bot_webhook(request: Request):
     json_data = await request.json()
     update = Update(**json_data)
-    await dp.feed_update(update)  # <--- исправлено здесь
+    await dp.feed_update(update, bot=bot)  # <-- главное здесь: передаем bot=bot
     return Response(status_code=200)
