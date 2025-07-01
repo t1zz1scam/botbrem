@@ -23,9 +23,7 @@ dp = Dispatcher(storage=storage)
 # Регистрируем твой router в Dispatcher
 dp.include_router(profile_router)
 
-app = FastAPI()
-
-# Твой хендлер команды /start
+# Хендлер команды /start
 @dp.message(F.text == "/start")
 async def start_cmd(message: types.Message):
     logging.info(f"Получена команда /start от {message.from_user.id}")
@@ -33,10 +31,10 @@ async def start_cmd(message: types.Message):
     await message.answer("Добро пожаловать!", reply_markup=main_menu(role))
     logging.info("Ответ на /start отправлен")
 
-# Регистрация start_cmd в Dispatcher
-dp.include_router(dp.router)  # Это может быть лишним, если dp.router уже содержит start_cmd
-# Можно просто так:
-# dp.message.register(start_cmd, F.text == "/start")
+# Регистрируем хендлер start_cmd в диспетчере
+dp.message.register(start_cmd, F.text == "/start")
+
+app = FastAPI()
 
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
@@ -63,6 +61,5 @@ async def on_shutdown():
 
 if __name__ == "__main__":
     import uvicorn
-
     logging.info(f"Запуск приложения на порту {PORT}")
     uvicorn.run("main:app", host="0.0.0.0", port=PORT, log_level="info")
