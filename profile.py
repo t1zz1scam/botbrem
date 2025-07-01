@@ -3,7 +3,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from database import get_user_by_id, update_user_name, update_user_wallet, get_top_users, get_total_earned_today, SessionLocal, Application
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = Router()
 
@@ -40,7 +39,7 @@ async def profile(message: types.Message):
 @router.callback_query(F.data == "edit_name")
 async def edit_name_handler(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer("Введите новое имя:")
-    await state.set_state(EditProfile.name)
+    await state.set_state(EditProfile.name)  # Правильно ставим состояние
     await callback.answer()
 
 @router.message(EditProfile.name)
@@ -52,7 +51,7 @@ async def save_new_name(message: types.Message, state: FSMContext):
 @router.callback_query(F.data == "edit_wallet")
 async def edit_wallet_handler(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer("Введите новый адрес кошелька:")
-    await state.set_state(EditProfile.wallet)
+    await state.set_state(EditProfile.wallet)  # Правильно ставим состояние
     await callback.answer()
 
 @router.message(EditProfile.wallet)
@@ -83,7 +82,7 @@ async def total_today(callback: types.CallbackQuery):
 @router.message(F.text == "📋 Подать заявку")
 async def start_application(message: types.Message, state: FSMContext):
     await message.answer("Опишите вашу заявку, пожалуйста:")
-    await ApplicationForm.message.set()
+    await state.set_state(ApplicationForm.message)  # Исправлено: правильный вызов
 
 @router.message(ApplicationForm.message)
 async def save_application(message: types.Message, state: FSMContext):
