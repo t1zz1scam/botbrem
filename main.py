@@ -8,7 +8,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN, SUPER_ADMINS
 from keyboards import main_menu
-from profile import router as profile_router  # твой aiogram Router
+from profile import router as profile_router
+from admin import router as admin_router  # Админские хендлеры
 
 logging.basicConfig(level=logging.INFO)
 
@@ -20,10 +21,9 @@ bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# Регистрируем твой router в Dispatcher
 dp.include_router(profile_router)
+dp.include_router(admin_router)
 
-# Хендлер команды /start
 @dp.message(F.text == "/start")
 async def start_cmd(message: types.Message):
     logging.info(f"Получена команда /start от {message.from_user.id}")
@@ -31,7 +31,6 @@ async def start_cmd(message: types.Message):
     await message.answer("Добро пожаловать!", reply_markup=main_menu(role))
     logging.info("Ответ на /start отправлен")
 
-# Регистрируем хендлер start_cmd в диспетчере
 dp.message.register(start_cmd, F.text == "/start")
 
 app = FastAPI()
