@@ -53,8 +53,7 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-# Функции для профиля
-
+# Функции для профиля и работы с БД (оставляй без изменений)
 async def get_user_by_id(user_id):
     async with SessionLocal() as session:
         result = await session.execute(select(User).where(User.user_id == user_id))
