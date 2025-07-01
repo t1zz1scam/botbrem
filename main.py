@@ -23,7 +23,7 @@ WEBAPP_PORT = int(os.getenv("PORT", 3000))
 
 bot = Bot(token=API_TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
+dp = Dispatcher(bot=bot, storage=storage)  # ВАЖНО: bot передаётся тут
 
 dp.include_router(profile_router)
 dp.include_router(admin_router)
@@ -57,5 +57,5 @@ async def on_shutdown():
 async def bot_webhook(request: Request):
     json_data = await request.json()
     update = Update(**json_data)
-    await dp.feed_update(update, bot=bot)  # <-- главное здесь: передаем bot=bot
+    await dp.feed_update(update)  # <--- ИСПРАВЛЕНО: убран bot=bot
     return Response(status_code=200)
