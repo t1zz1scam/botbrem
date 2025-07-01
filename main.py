@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -8,8 +9,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN, SUPER_ADMINS
 from keyboards import main_menu
-from profile import router as profile_router
-from admin import router as admin_router  # Админские хендлеры
+from profile import router as profile_router  # твой aiogram Router
+from database import init_db
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,7 +23,6 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
 dp.include_router(profile_router)
-dp.include_router(admin_router)
 
 @dp.message(F.text == "/start")
 async def start_cmd(message: types.Message):
@@ -49,7 +49,8 @@ async def telegram_webhook(request: Request):
 
 @app.on_event("startup")
 async def on_startup():
-    logging.info(f"Установка webhook: {WEBHOOK_URL}")
+    logging.info(f"Инициализация базы данных и установка webhook: {WEBHOOK_URL}")
+    await init_db()  # Создание таблиц
     await bot.set_webhook(WEBHOOK_URL)
 
 @app.on_event("shutdown")
