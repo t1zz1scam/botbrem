@@ -2,20 +2,16 @@ import os
 from datetime import datetime, timedelta
 from sqlalchemy import (
     Column, Integer, BigInteger, String, Text, Boolean, DateTime,
-    ForeignKey, func, select, update, desc, text
+    ForeignKey, func, select, update, desc
 )
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 Base = declarative_base()
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL env variable is not set")
-
-engine = create_async_engine(DATABASE_URL, future=True)
+engine = create_async_engine(os.getenv("DATABASE_URL"), future=True)
 SessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
+# Модели
 class User(Base):
     __tablename__ = "users"
     user_id = Column(BigInteger, primary_key=True)
@@ -54,48 +50,60 @@ class News(Base):
     created_at = Column(DateTime, server_default=func.now())
     sent = Column(Boolean, default=False)
 
+# Инициализация базы
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-async def run_bigint_migration(engine):
-    async with engine.begin() as conn:
-        # Проверяем тип поля users.user_id
-        result = await conn.execute(text("""
-            SELECT data_type 
-            FROM information_schema.columns 
-            WHERE table_name='users' AND column_name='user_id'
-        """))
-        row = await result.first()
-        if row:
-            data_type = row[0]
-            if data_type != 'bigint':
-                print("Migrating users.user_id to BIGINT...")
-                await conn.execute(text("""
-                    ALTER TABLE users ALTER COLUMN user_id TYPE BIGINT;
-                """))
-            else:
-                print("users.user_id already BIGINT")
-        else:
-            print("Column users.user_id not found")
+# Функции доступа к данным
+async def get_user_by_id(user_id: int):
+    async with SessionLocal() as session:
+        result = await session.execute(select(User).where(User.user_id == user_id))
+        return result.scalar_one_or_none()
 
-        # Проверяем тип поля payouts.amount
-        result = await conn.execute(text("""
-            SELECT data_type 
-            FROM information_schema.columns 
-            WHERE table_name='payouts' AND column_name='amount'
-        """))
-        row = await result.first()
-        if row:
-            data_type = row[0]
-            if data_type != 'bigint':
-                print("Migrating payouts.amount to BIGINT...")
-                await conn.execute(text("""
-                    ALTER TABLE payouts ALTER COLUMN amount TYPE BIGINT;
-                """))
-            else:
-                print("payouts.amount already BIGINT")
-        else:
-            print("Column payouts.amount not found")
+async def create_user_if_not_exists(user_id: int):
+    async with SessionLocal() as session:
+        user = await get_user_by_id(user_id)
+        if not user:
+            new_user = User(user_id=user_id)
+            session.add(new_user)
+            await session.commit()
+            return new_user
+        return user
 
-# Остальные функции (get_user_by_id, create_user_if_not_exists и т.д.) можно оставить без изменений
+async def update_user_name(user_id: int, name: str):
+    async with SessionLocal() as session:
+        await session.execute(update(User).where(User.user_id == user_id).values(name=name))
+        await session.commit()
+
+async def update_user_wallet(user_id: int, wallet: str):
+    async with SessionLocal() as session:
+        await session.execute(update(User).where(User.user_id == user_id).values(contact=wallet))
+        await session.commit()
+
+async def get_top_users(period="day"):
+    now = datetime.utcnow()
+    since = now - {
+        "day": timedelta(days=1),
+        "week": timedelta(weeks=1),
+        "month": timedelta(days=30),
+    }.get(period, timedelta(days=1))
+
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(User.name, func.sum(Payout.amount).label("earned"))
+            .join(Payout)
+            .where(Payout.created_at >= since)
+            .group_by(User.user_id)
+            .order_by(desc("earned"))
+            .limit(10)
+        )
+        return result.mappings().all()
+
+async def get_total_earned_today():
+    today = datetime.utcnow().date()
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(func.sum(Payout.amount)).where(func.date(Payout.created_at) == today)
+        )
+        return result.scalar()
