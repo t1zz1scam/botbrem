@@ -60,7 +60,12 @@ async def on_shutdown():
 
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
-    json_data = await request.json()
-    update = Update(**json_data)
-    await dp.feed_update(bot, update)
+    try:
+        json_data = await request.json()
+        logger.info(f"Получен update: {json_data}")
+        update = Update(**json_data)
+        await dp.feed_update(bot, update)
+    except Exception as e:
+        logger.error(f"Ошибка при обработке update: {e}", exc_info=True)
+        return Response(status_code=500)
     return Response(status_code=200)
