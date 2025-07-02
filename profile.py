@@ -5,8 +5,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from aiogram.fsm.state import State, StatesGroup
 from database import (
     get_user_by_id, update_user_name, update_user_wallet,
-    get_top_users, get_total_earned_today,
-    SessionLocal, Application, User
+    get_top_users, get_total_earned_today, SessionLocal, Application,
+    create_user_if_not_exists
 )
 
 router = Router()
@@ -23,38 +23,30 @@ def profile_kb():
         [InlineKeyboardButton(text="✏ Изменить имя", callback_data="edit_name")],
         [InlineKeyboardButton(text="💼 Изменить кошелек", callback_data="edit_wallet")],
         [InlineKeyboardButton(text="📊 Топ пользователей", callback_data="top_users")],
-        [InlineKeyboardButton(text="💰 Общий заработок за сегодня", callback_data="total_today")]
+        [InlineKeyboardButton(text="💰 Общий заработок за сегодня", callback_data="total_today")],
     ])
 
-menu_registered = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="👤 Профиль")]],
-    resize_keyboard=True
-)
-
-menu_unregistered = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="📋 Подать заявку")]],
-    resize_keyboard=True
-)
+def get_main_menu(is_new: bool):
+    buttons = []
+    if is_new:
+        buttons.append([KeyboardButton(text="📋 Подать заявку")])
+    else:
+        buttons.append([KeyboardButton(text="👤 Профиль")])
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
-    user_id = message.from_user.id
-    user = await get_user_by_id(user_id)
+    user = await create_user_if_not_exists(message.from_user.id)
+    is_new = not user.name and not user.contact
 
-    if user:
-        await message.answer("👋 Привет! Вы уже зарегистрированы.", reply_markup=menu_registered)
-    else:
-        async with SessionLocal() as session:
-            session.add(User(user_id=user_id))
-            await session.commit()
-        await message.answer("👋 Добро пожаловать! Вы можете подать заявку.", reply_markup=menu_unregistered)
+    await message.answer(
+        "👋 Добро пожаловать! Выберите действие:",
+        reply_markup=get_main_menu(is_new)
+    )
 
 @router.message(F.text == "👤 Профиль")
 async def profile(message: types.Message):
     user = await get_user_by_id(message.from_user.id)
-    if not user:
-        await message.answer("❌ У вас ещё нет профиля. Нажмите /start для регистрации.")
-        return
 
     text = (
         f"<b>👤 Ваш профиль</b>\n\n"
@@ -74,7 +66,7 @@ async def edit_name_handler(callback: types.CallbackQuery, state: FSMContext):
 @router.message(EditProfile.name)
 async def save_new_name(message: types.Message, state: FSMContext):
     await update_user_name(message.from_user.id, message.text)
-    await message.answer("Имя обновлено ✅")
+    await message.answer("Имя обновлено")
     await state.clear()
 
 @router.callback_query(F.data == "edit_wallet")
@@ -86,7 +78,7 @@ async def edit_wallet_handler(callback: types.CallbackQuery, state: FSMContext):
 @router.message(EditProfile.wallet)
 async def save_new_wallet(message: types.Message, state: FSMContext):
     await update_user_wallet(message.from_user.id, message.text)
-    await message.answer("Кошелек обновлен ✅")
+    await message.answer("Кошелек обновлен")
     await state.clear()
 
 @router.callback_query(F.data == "top_users")
@@ -97,7 +89,7 @@ async def top_users(callback: types.CallbackQuery):
     else:
         text = "<b>🏆 Топ пользователей за сегодня:</b>\n\n"
         for i, row in enumerate(top, 1):
-            text += f"{i}. {row['name'] or 'Без имени'} — {row['earned']:.2f} USDT\n"
+            text += f"{i}. {row['name']} — {row['earned']:.2f} USDT\n"
     await callback.message.answer(text)
     await callback.answer()
 
@@ -115,10 +107,8 @@ async def start_application(message: types.Message, state: FSMContext):
 
 @router.message(ApplicationForm.message)
 async def save_application(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    text = message.text
     async with SessionLocal() as session:
-        new_app = Application(user_id=user_id, message=text, status="pending")
+        new_app = Application(user_id=message.from_user.id, message=message.text, status="pending")
         session.add(new_app)
         await session.commit()
     await message.answer("Ваша заявка принята! Ожидайте обработки.")
