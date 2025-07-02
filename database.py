@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timedelta
 from sqlalchemy import (
     Column, Integer, BigInteger, String, Text, Boolean, DateTime,
-    ForeignKey, func, select, update, desc
+    ForeignKey, func, select, update, desc, text
 )
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
@@ -54,6 +54,36 @@ class News(Base):
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+# Функция миграции BIGINT
+async def run_bigint_migration(engine):
+    async with engine.begin() as conn:
+        # Проверяем есть ли столбец user_id с типом Integer, меняем на BigInteger
+        # Этот пример для PostgreSQL — адаптируй, если у тебя другая БД
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='user_id' AND data_type='integer'
+                ) THEN
+                    ALTER TABLE users ALTER COLUMN user_id TYPE BIGINT;
+                END IF;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='applications' AND column_name='user_id' AND data_type='integer'
+                ) THEN
+                    ALTER TABLE applications ALTER COLUMN user_id TYPE BIGINT;
+                END IF;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='payouts' AND column_name='user_id' AND data_type='integer'
+                ) THEN
+                    ALTER TABLE payouts ALTER COLUMN user_id TYPE BIGINT;
+                END IF;
+            END;
+            $$;
+        """))
 
 # Функции доступа к данным
 async def get_user_by_id(user_id: int):
