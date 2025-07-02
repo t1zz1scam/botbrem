@@ -55,7 +55,14 @@ async def on_startup():
 async def on_shutdown():
     logger.info("Удаляем webhook...")
     await bot.delete_webhook()
+
+    logger.info("Закрываем хранилище FSM...")
     await storage.close()
+
+    logger.info("Закрываем объект бота и клиентскую сессию...")
+    await bot.session.close()  # <-- вот тут главное закрыть сессию aiohttp
+    await bot.close()
+
     logger.info("Шатдаун завершен")
 
 @app.post(WEBHOOK_PATH)
