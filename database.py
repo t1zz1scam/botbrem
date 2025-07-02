@@ -17,7 +17,7 @@ class User(Base):
     name = Column(String, nullable=True)
     contact = Column(String, nullable=True)
     role = Column(String, default="user")
-    payout = Column(Integer, default=0)
+    payout = Column(BigInteger, default=0)  # Исправлено
     joined_at = Column(DateTime, server_default=func.now())
     applications = relationship("Application", back_populates="user")
     payouts_hist = relationship("Payout", back_populates="user")
@@ -37,7 +37,7 @@ class Payout(Base):
     __tablename__ = "payouts"
     id = Column(Integer, primary_key=True)
     user_id = Column(BigInteger, ForeignKey("users.user_id"))
-    amount = Column(Integer)
+    amount = Column(BigInteger)  # Исправлено
     issued_by = Column(BigInteger)
     created_at = Column(DateTime, server_default=func.now())
     user = relationship("User", back_populates="payouts_hist")
@@ -53,12 +53,23 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-# Функции для профиля
+# Функции
 
 async def get_user_by_id(user_id):
     async with SessionLocal() as session:
         result = await session.execute(select(User).where(User.user_id == user_id))
         return result.scalar_one_or_none()
+
+async def create_user_if_not_exists(user_id):
+    async with SessionLocal() as session:
+        result = await session.execute(select(User).where(User.user_id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            new_user = User(user_id=user_id)
+            session.add(new_user)
+            await session.commit()
+            return new_user
+        return user
 
 async def update_user_name(user_id, name):
     async with SessionLocal() as session:
@@ -72,14 +83,11 @@ async def update_user_wallet(user_id, wallet):
 
 async def get_top_users(period="day"):
     now = datetime.utcnow()
-    if period == "day":
-        since = now - timedelta(days=1)
-    elif period == "week":
-        since = now - timedelta(weeks=1)
-    elif period == "month":
-        since = now - timedelta(days=30)
-    else:
-        since = now - timedelta(days=1)
+    since = now - {
+        "day": timedelta(days=1),
+        "week": timedelta(weeks=1),
+        "month": timedelta(days=30),
+    }.get(period, timedelta(days=1))
 
     async with SessionLocal() as session:
         result = await session.execute(
