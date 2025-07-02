@@ -26,12 +26,17 @@ def profile_kb():
         [InlineKeyboardButton(text="💰 Общий заработок за сегодня", callback_data="total_today")],
     ])
 
-def get_main_menu(is_new: bool):
+def get_main_menu(user_role: str, is_new: bool):
     buttons = []
-    if is_new:
-        buttons.append([KeyboardButton(text="📋 Подать заявку")])
-    else:
+    # Если пользователь — админ или супер-админ, показываем только профиль
+    if user_role in ("admin", "superadmin"):
         buttons.append([KeyboardButton(text="👤 Профиль")])
+    else:
+        # Обычным юзерам: если новый — предложить подать заявку, иначе профиль
+        if is_new:
+            buttons.append([KeyboardButton(text="📋 Подать заявку")])
+        else:
+            buttons.append([KeyboardButton(text="👤 Профиль")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 @router.message(CommandStart())
@@ -41,7 +46,7 @@ async def cmd_start(message: types.Message):
 
     await message.answer(
         "👋 Добро пожаловать! Выберите действие:",
-        reply_markup=get_main_menu(is_new)
+        reply_markup=get_main_menu(user.role, is_new)
     )
 
 @router.message(F.text == "👤 Профиль")
