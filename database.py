@@ -11,6 +11,8 @@ Base = declarative_base()
 engine = create_async_engine(os.getenv("DATABASE_URL"), future=True)
 SessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
+SUPER_ADMIN_ID = int(os.getenv("SUPER_ADMIN_ID", 0))  # Добавил переменную супер-админа
+
 # Модели
 class User(Base):
     __tablename__ = "users"
@@ -58,8 +60,6 @@ async def init_db():
 # Функция миграции BIGINT
 async def run_bigint_migration(engine):
     async with engine.begin() as conn:
-        # Проверяем есть ли столбец user_id с типом Integer, меняем на BigInteger
-        # Этот пример для PostgreSQL — адаптируй, если у тебя другая БД
         await conn.execute(text("""
             DO $$
             BEGIN
@@ -95,11 +95,22 @@ async def create_user_if_not_exists(user_id: int):
     async with SessionLocal() as session:
         user = await get_user_by_id(user_id)
         if not user:
-            new_user = User(user_id=user_id)
+            role = "superadmin" if user_id == SUPER_ADMIN_ID else "user"
+            new_user = User(user_id=user_id, role=role)
             session.add(new_user)
             await session.commit()
             return new_user
-        return user
+        else:
+            # Обновим роль, если это супер-админ, но роль не совпадает
+            if user.user_id == SUPER_ADMIN_ID and user.role != "superadmin":
+                await session.execute(
+                    update(User)
+                    .where(User.user_id == user_id)
+                    .values(role="superadmin")
+                )
+                await session.commit()
+                user.role = "superadmin"
+            return user
 
 async def update_user_name(user_id: int, name: str):
     async with SessionLocal() as session:
