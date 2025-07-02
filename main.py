@@ -4,7 +4,8 @@ from fastapi import FastAPI, Request, Response
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, Update
-from database import init_db
+
+from database import init_db, engine, run_bigint_migration
 from profile import router as profile_router
 from admin import router as admin_router
 
@@ -34,6 +35,9 @@ app = FastAPI()
 
 @app.on_event("startup")
 async def on_startup():
+    logger.info("Запуск миграции bigint...")
+    await run_bigint_migration(engine)
+
     logger.info("Инициализация базы данных...")
     await init_db()
 
@@ -58,5 +62,5 @@ async def on_shutdown():
 async def bot_webhook(request: Request):
     json_data = await request.json()
     update = Update(**json_data)
-    await dp.feed_update(bot, update)  # <- Важно: передаем bot и update
+    await dp.feed_update(bot, update)
     return Response(status_code=200)
