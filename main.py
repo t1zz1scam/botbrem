@@ -1,9 +1,11 @@
 import os
 import logging
+import asyncio
 from fastapi import FastAPI, Request, Response
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, Update
+from aiogram.exceptions import TelegramRetryAfter
 
 from database import init_db, engine, run_bigint_migration
 from profile import router as profile_router
@@ -33,6 +35,7 @@ dp.include_router(admin_router)
 
 app = FastAPI()
 
+
 @app.on_event("startup")
 async def on_startup():
     logger.info("Запуск миграции bigint...")
@@ -51,19 +54,34 @@ async def on_startup():
     await bot.set_my_commands(commands)
     logger.info("Команды бота установлены")
 
+
 @app.on_event("shutdown")
 async def on_shutdown():
     logger.info("Удаляем webhook...")
-    await bot.delete_webhook()
+    try:
+        await bot.delete_webhook()
+    except TelegramRetryAfter as e:
+        logger.warning(f"Flood limit при удалении webhook: ждать {e.timeout} секунд")
+        await asyncio.sleep(e.timeout)
+        try:
+            await bot.delete_webhook()
+        except Exception as ex:
+            logger.error(f"Ошибка при повторном удалении webhook: {ex}")
 
     logger.info("Закрываем хранилище FSM...")
-    await storage.close()
+    try:
+        await storage.close()
+    except Exception as e:
+        logger.error(f"Ошибка при закрытии хранилища FSM: {e}")
 
-    logger.info("Закрываем объект бота и клиентскую сессию...")
-    await bot.session.close()  # <-- вот тут главное закрыть сессию aiohttp
-    await bot.close()
+    logger.info("Закрываем клиентскую сессию бота...")
+    try:
+        await bot.session.close()
+    except Exception as e:
+        logger.error(f"Ошибка при закрытии сессии бота: {e}")
 
     logger.info("Шатдаун завершен")
+
 
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
