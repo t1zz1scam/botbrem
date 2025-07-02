@@ -1,8 +1,10 @@
+import os
 from aiogram import Router, types, F
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.state import State, StatesGroup
+
 from database import (
     get_user_by_id, update_user_name, update_user_wallet,
     get_top_users, get_total_earned_today, SessionLocal, Application,
@@ -10,6 +12,8 @@ from database import (
 )
 
 router = Router()
+
+SUPERADMIN_ID = int(os.getenv("SUPERADMIN_ID", "0"))
 
 class EditProfile(StatesGroup):
     name = State()
@@ -26,27 +30,26 @@ def profile_kb():
         [InlineKeyboardButton(text="💰 Общий заработок за сегодня", callback_data="total_today")],
     ])
 
-def get_main_menu(user_role: str, is_new: bool):
+def get_main_menu(is_new: bool):
     buttons = []
-    # Если пользователь — админ или супер-админ, показываем только профиль
-    if user_role in ("admin", "superadmin"):
-        buttons.append([KeyboardButton(text="👤 Профиль")])
+    if is_new:
+        buttons.append([KeyboardButton(text="📋 Подать заявку")])
     else:
-        # Обычным юзерам: если новый — предложить подать заявку, иначе профиль
-        if is_new:
-            buttons.append([KeyboardButton(text="📋 Подать заявку")])
-        else:
-            buttons.append([KeyboardButton(text="👤 Профиль")])
+        buttons.append([KeyboardButton(text="👤 Профиль")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
     user = await create_user_if_not_exists(message.from_user.id)
-    is_new = not user.name and not user.contact
+    # Если это супер админ или админ — считаем, что профиль есть
+    if user.user_id == SUPERADMIN_ID or user.role in ("admin", "superadmin"):
+        is_new = False
+    else:
+        is_new = not user.name and not user.contact
 
     await message.answer(
         "👋 Добро пожаловать! Выберите действие:",
-        reply_markup=get_main_menu(user.role, is_new)
+        reply_markup=get_main_menu(is_new)
     )
 
 @router.message(F.text == "👤 Профиль")
