@@ -12,6 +12,7 @@ from handlers import router as handlers_router  # Импортируем еди�
 
 # Настраиваем логирование
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # FastAPI-приложение
 app = FastAPI()
@@ -118,12 +119,31 @@ async def on_startup():
 @app.post("/bot-webhook")
 async def bot_webhook(request: Request):
     try:
+        # Логируем полученные данные
         data = await request.json()
+        logger.info(f"Received update: {data}")  # Логируем входящее обновление
+
+        # Передаем данные в диспетчер
         update = Update(**data)
-        # feed_update принимает bot и update, чтобы передать в диспетчер
         await dp.feed_update(bot, update)
+        logger.info(f"Update processed: {data}")  # Логируем успешную обработку
+
     except Exception as e:
-        logging.error(f"❌ Ошибка в webhook: {e}")
+        # Логируем ошибки
+        logger.error(f"Error processing webhook: {e}")
         return JSONResponse(content={"status": "error", "detail": str(e)}, status_code=500)
 
     return JSONResponse(content={"status": "ok"})
+
+# Проверка вебхука (для диагностики)
+@app.get("/check-webhook")
+async def check_webhook():
+    try:
+        # Проверим текущий статус вебхука
+        webhook_info = await bot.get_webhook_info()
+        logger.info(f"Webhook info: {webhook_info}")
+        return {"status": "ok", "webhook_info": webhook_info}
+    except Exception as e:
+        logger.error(f"Error checking webhook: {e}")
+        return {"status": "error", "detail": str(e)}
+
