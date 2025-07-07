@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timedelta
 from sqlalchemy import (
     Column, Integer, BigInteger, String, Text, Boolean, DateTime,
-    ForeignKey, func, select, update, desc, text
+    ForeignKey, func, select, update, desc, text, inspect
 )
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
@@ -11,8 +11,9 @@ Base = declarative_base()
 engine = create_async_engine(os.getenv("DATABASE_URL"), future=True)
 SessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-SUPER_ADMIN_ID = int(os.getenv("SUPER_ADMIN_ID", 0))
+SUPER_ADMIN_ID = int(os.getenv("SUPER_ADMIN_ID", 0))  # Супер-админ из .env
 
+# Модели
 class User(Base):
     __tablename__ = "users"
     user_id = Column(BigInteger, primary_key=True)
@@ -21,8 +22,7 @@ class User(Base):
     role = Column(String, default="user")
     payout = Column(BigInteger, default=0)
     joined_at = Column(DateTime, server_default=func.now())
-    banned_until = Column(DateTime, nullable=True)
-    rank = Column(String, nullable=True)
+    banned_until = Column(DateTime, nullable=True)  # Новое поле
     applications = relationship("Application", back_populates="user")
     payouts_hist = relationship("Payout", back_populates="user")
 
@@ -53,36 +53,24 @@ class News(Base):
     created_at = Column(DateTime, server_default=func.now())
     sent = Column(Boolean, default=False)
 
+# Инициализация базы
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-async def run_bigint_migration(engine):
+# Авто-проверка и добавление banned_until
+async def ensure_banned_until_column():
     async with engine.begin() as conn:
-        await conn.execute(text("""
-            DO $$
-            BEGIN
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name='users' AND column_name='user_id' AND data_type='integer'
-                ) THEN
-                    ALTER TABLE users ALTER COLUMN user_id TYPE BIGINT;
-                END IF;
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name='applications' AND column_name='user_id' AND data_type='integer'
-                ) THEN
-                    ALTER TABLE applications ALTER COLUMN user_id TYPE BIGINT;
-                END IF;
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name='payouts' AND column_name='user_id' AND data_type='integer'
-                ) THEN
-                    ALTER TABLE payouts ALTER COLUMN user_id TYPE BIGINT;
-                END IF;
-            END;
-            $$;
-        """))
+        inspector = inspect(conn.sync_engine)
+        columns = inspector.get_columns("users")
+        column_names = [col["name"] for col in columns]
+        if "banned_until" not in column_names:
+            await conn.execute(text('ALTER TABLE users ADD COLUMN banned_until TIMESTAMP NULL;'))
+            print("Добавлен столбец banned_until в users")
+        else:
+            print("Столбец banned_until уже существует")
+
+# --- Функции доступа к данным ---
 
 async def get_user_by_id(user_id: int):
     async with SessionLocal() as session:
