@@ -1,9 +1,11 @@
 from aiogram import Router, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
 from database import Application, SessionLocal, User, Payout
 from sqlalchemy.future import select
 from sqlalchemy import update
 from datetime import datetime
+from config import CHANNEL_IDS
 
 router = Router()
 
@@ -142,14 +144,14 @@ async def view_users(callback: types.CallbackQuery):
 
     text = "<b>Список пользователей:</b>\n\n"
     for u in users:
-        text += f"ID: {u.user_id} | Имя: {u.name or 'Не указано'} | Роль: {u.role or 'user'} | Ранг: {getattr(u, 'rank', 'не назначен')}\n"
+        text += f"ID: {u.user_id} | Имя: {u.name or 'Не указано'} | Роль: {u.role or 'user'} | Ранг: {getattr(u, 'user_rank', 'не назначен')}\n"
 
     await callback.message.answer(text)
     await callback.answer()
 
 # 3) Назначение админа (только супер-админ)
 @router.callback_query(F.data == "assign_admin")
-async def assign_admin_start(callback: types.CallbackQuery, state=None):
+async def assign_admin_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_superadmin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
@@ -158,8 +160,12 @@ async def assign_admin_start(callback: types.CallbackQuery, state=None):
     await callback.answer()
 
 @router.message(F.state == "assign_admin_waiting_for_user_id")
-async def assign_admin_confirm(message: types.Message, state):
-    user_id = int(message.text)
+async def assign_admin_confirm(message: types.Message, state: FSMContext):
+    try:
+        user_id = int(message.text)
+    except ValueError:
+        await message.answer("Введите корректный ID пользователя.")
+        return
     async with SessionLocal() as session:
         user = await session.get(User, user_id)
         if not user:
@@ -179,7 +185,7 @@ RANKS = {
 }
 
 @router.callback_query(F.data == "change_rank")
-async def change_rank_start(callback: types.CallbackQuery, state=None):
+async def change_rank_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
@@ -188,7 +194,7 @@ async def change_rank_start(callback: types.CallbackQuery, state=None):
     await callback.answer()
 
 @router.message(F.state == "change_rank_waiting_for_user_id")
-async def change_rank_user_id(message: types.Message, state):
+async def change_rank_user_id(message: types.Message, state: FSMContext):
     try:
         user_id = int(message.text)
     except ValueError:
@@ -205,7 +211,7 @@ async def change_rank_user_id(message: types.Message, state):
         await state.set_state("change_rank_waiting_for_rank")
 
 @router.message(F.state == "change_rank_waiting_for_rank")
-async def change_rank_select(message: types.Message, state):
+async def change_rank_select(message: types.Message, state: FSMContext):
     rank = message.text.lower()
     if rank not in RANKS:
         await message.answer(f"Неверный ранг. Выберите из: {', '.join(RANKS.keys())}")
@@ -215,7 +221,7 @@ async def change_rank_select(message: types.Message, state):
     async with SessionLocal() as session:
         user = await session.get(User, user_id)
         if user:
-            setattr(user, "rank", rank)
+            user.user_rank = rank
             session.add(user)
             await session.commit()
             await message.answer(f"Ранг пользователя {user_id} изменен на {rank}.")
@@ -223,7 +229,7 @@ async def change_rank_select(message: types.Message, state):
 
 # 5) Выдача и вычитание выплат
 @router.callback_query(F.data == "manage_payout")
-async def manage_payout_start(callback: types.CallbackQuery, state=None):
+async def manage_payout_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
@@ -232,7 +238,7 @@ async def manage_payout_start(callback: types.CallbackQuery, state=None):
     await callback.answer()
 
 @router.message(F.state == "payout_waiting_for_user_id")
-async def payout_get_user_id(message: types.Message, state):
+async def payout_get_user_id(message: types.Message, state: FSMContext):
     try:
         user_id = int(message.text)
     except ValueError:
@@ -243,7 +249,7 @@ async def payout_get_user_id(message: types.Message, state):
     await state.set_state("payout_waiting_for_amount")
 
 @router.message(F.state == "payout_waiting_for_amount")
-async def payout_get_amount(message: types.Message, state):
+async def payout_get_amount(message: types.Message, state: FSMContext):
     try:
         amount = int(message.text)
     except ValueError:
@@ -259,7 +265,7 @@ async def payout_get_amount(message: types.Message, state):
             await state.clear()
             return
         # Обновляем баланс с учетом ранга
-        rank = getattr(user, "rank", None)
+        rank = getattr(user, "user_rank", None)
         percent = RANKS.get(rank, 1)
         payout_amount = int(amount * percent)
         user.payout = (user.payout or 0) + payout_amount
@@ -274,7 +280,7 @@ async def payout_get_amount(message: types.Message, state):
 
 # 6) Бан и заморозка пользователя
 @router.callback_query(F.data == "ban_user")
-async def ban_user_start(callback: types.CallbackQuery, state=None):
+async def ban_user_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
@@ -283,7 +289,7 @@ async def ban_user_start(callback: types.CallbackQuery, state=None):
     await callback.answer()
 
 @router.message(F.state == "ban_waiting_for_user_id")
-async def ban_user_get_id(message: types.Message, state):
+async def ban_user_get_id(message: types.Message, state: FSMContext):
     try:
         user_id = int(message.text)
     except ValueError:
@@ -294,7 +300,7 @@ async def ban_user_get_id(message: types.Message, state):
     await state.set_state("ban_waiting_for_days")
 
 @router.message(F.state == "ban_waiting_for_days")
-async def ban_user_set_days(message: types.Message, state):
+async def ban_user_set_days(message: types.Message, state: FSMContext):
     try:
         days = int(message.text)
     except ValueError:
@@ -312,7 +318,6 @@ async def ban_user_set_days(message: types.Message, state):
             user.banned_until = None
             await message.answer(f"Пользователь {user_id} разбанен.")
         else:
-            from datetime import datetime, timedelta
             user.banned_until = datetime.utcnow() + timedelta(days=days)
             await message.answer(f"Пользователь {user_id} заблокирован на {days} дней.")
         session.add(user)
@@ -321,7 +326,7 @@ async def ban_user_set_days(message: types.Message, state):
 
 # 7) Постинг в бота
 @router.callback_query(F.data == "post_bot")
-async def post_bot_start(callback: types.CallbackQuery, state=None):
+async def post_bot_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
@@ -330,16 +335,15 @@ async def post_bot_start(callback: types.CallbackQuery, state=None):
     await callback.answer()
 
 @router.message(F.state == "post_bot_waiting_text")
-async def post_bot_send(message: types.Message, state):
+async def post_bot_send(message: types.Message, state: FSMContext):
     text = message.text
-    # Отправляем всем пользователям (если надо, можно сделать рассылку)
+    # Здесь можно добавить рассылку всем пользователям из базы, пока просто ответ
     await message.answer("Пост опубликован в боте:\n\n" + text)
-    # Для демонстрации — просто ответили, можно расширить на рассылку
     await state.clear()
 
 # 8) Постинг в канал
 @router.callback_query(F.data == "post_channel")
-async def post_channel_start(callback: types.CallbackQuery, state=None):
+async def post_channel_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
@@ -348,9 +352,8 @@ async def post_channel_start(callback: types.CallbackQuery, state=None):
     await callback.answer()
 
 @router.message(F.state == "post_channel_waiting_text")
-async def post_channel_send(message: types.Message, state):
+async def post_channel_send(message: types.Message, state: FSMContext):
     text = message.text
-    from config import CHANNEL_IDS
     for ch_id in CHANNEL_IDS:
         try:
             await message.bot.send_message(ch_id, text)
