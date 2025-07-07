@@ -89,4 +89,63 @@ class News(Base):
     sent = Column(Boolean, default=False)
 
 
-# остальной код миграций и вспомогательных функций без изменений
+# Вспомогательные функции
+async def get_user_by_id(user_id: int):
+    async with SessionLocal() as session:
+        result = await session.execute(select(User).where(User.user_id == user_id))
+        return result.scalar_one_or_none()
+
+async def create_user_if_not_exists(user_id: int):
+    async with SessionLocal() as session:
+        user = await get_user_by_id(user_id)
+        if not user:
+            role = "superadmin" if user_id == SUPERADMIN_ID else "user"
+            new_user = User(user_id=user_id, role=role)
+            session.add(new_user)
+            await session.commit()
+            return new_user
+        else:
+            if user.user_id == SUPERADMIN_ID and user.role != "superadmin":
+                await session.execute(
+                    update(User).where(User.user_id == user_id).values(role="superadmin")
+                )
+                await session.commit()
+                user.role = "superadmin"
+            return user
+
+async def update_user_name(user_id: int, name: str):
+    async with SessionLocal() as session:
+        await session.execute(update(User).where(User.user_id == user_id).values(name=name))
+        await session.commit()
+
+async def update_user_wallet(user_id: int, wallet: str):
+    async with SessionLocal() as session:
+        await session.execute(update(User).where(User.user_id == user_id).values(contact=wallet))
+        await session.commit()
+
+async def get_top_users(period="day"):
+    now = datetime.utcnow()
+    since = now - {
+        "day": timedelta(days=1),
+        "week": timedelta(weeks=1),
+        "month": timedelta(days=30),
+    }.get(period, timedelta(days=1))
+
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(User.name, func.sum(Payout.amount).label("earned"))
+            .join(Payout)
+            .where(Payout.created_at >= since)
+            .group_by(User.user_id)
+            .order_by(desc("earned"))
+            .limit(10)
+        )
+        return result.mappings().all()
+
+async def get_total_earned_today():
+    today = datetime.utcnow().date()
+    async with SessionLocal() as session:
+        res = await session.execute(
+            select(func.sum(Payout.amount)).where(func.date(Payout.created_at) == today)
+        )
+        return res.scalar()
