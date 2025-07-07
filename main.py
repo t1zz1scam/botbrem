@@ -76,7 +76,7 @@ async def on_shutdown():
 @app.post("/bot-webhook")
 async def bot_webhook(request: Request):
     update = await request.json()
-    await dp.feed_update(bot, update, request)
+    await dp.feed_update(bot=bot, update=update)
     return JSONResponse(content={"status": "ok"})
 
 # --- Точка запуска с uvicorn ---
