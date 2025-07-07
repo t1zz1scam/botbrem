@@ -42,7 +42,7 @@ async def on_startup():
     await run_bigint_migration(engine)
 
     logger.info("Проверка и добавление поля banned_until, если необходимо...")
-    await ensure_banned_until_column()
+    await ensure_banned_until_column(engine)  # <- здесь был баг, добавлен engine
 
     logger.info("Инициализация базы данных...")
     await init_db()
