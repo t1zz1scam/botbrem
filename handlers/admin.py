@@ -1,13 +1,18 @@
+import logging
 from aiogram import Router, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from database import Application, SessionLocal, User, Payout
 from sqlalchemy.future import select
 from sqlalchemy import update
-from datetime import datetime
+from datetime import datetime, timedelta
 from config import CHANNEL_IDS
 
 router = Router()
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Клавиатура админ-панели
 admin_panel_kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -39,14 +44,17 @@ async def is_superadmin(user_id: int):
 async def admin_panel(message: types.Message):
     if not await is_admin(message.from_user.id):
         await message.answer("❌ У вас нет прав администратора.")
+        logger.warning(f"User {message.from_user.id} tried to access admin panel without permissions.")
         return
     await message.answer("👷‍♂️ Админ-панель", reply_markup=admin_panel_kb)
+    logger.info(f"Admin panel accessed by {message.from_user.id}")
 
 # 1) Просмотр заявок
 @router.callback_query(F.data == "view_applications")
 async def view_applications(callback: types.CallbackQuery):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
+        logger.warning(f"User {callback.from_user.id} tried to view applications without admin rights.")
         return
     async with SessionLocal() as session:
         result = await session.execute(select(Application).where(Application.status == "pending"))
@@ -54,6 +62,7 @@ async def view_applications(callback: types.CallbackQuery):
 
     if not applications:
         await callback.message.answer("Нет новых заявок.")
+        logger.info(f"No new applications available for {callback.from_user.id}.")
         await callback.answer()
         return
 
@@ -77,6 +86,7 @@ async def view_applications(callback: types.CallbackQuery):
 async def approve_application(callback: types.CallbackQuery):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
+        logger.warning(f"User {callback.from_user.id} tried to approve application without admin rights.")
         return
 
     app_id = int(callback.data.split("_")[1])
@@ -96,14 +106,16 @@ async def approve_application(callback: types.CallbackQuery):
     await callback.message.answer(f"Заявка #{app_id} одобрена.")
     try:
         await callback.bot.send_message(app.user_id, "Ваша заявка одобрена администратором!")
-    except Exception:
-        pass
+        logger.info(f"Application #{app_id} approved by {admin_id}. Notification sent to user {app.user_id}.")
+    except Exception as e:
+        logger.error(f"Failed to notify user {app.user_id} about approval: {e}")
     await callback.answer()
 
 @router.callback_query(F.data.startswith("reject_"))
 async def reject_application(callback: types.CallbackQuery):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
+        logger.warning(f"User {callback.from_user.id} tried to reject application without admin rights.")
         return
 
     app_id = int(callback.data.split("_")[1])
@@ -123,8 +135,9 @@ async def reject_application(callback: types.CallbackQuery):
     await callback.message.answer(f"Заявка #{app_id} отклонена.")
     try:
         await callback.bot.send_message(app.user_id, "Ваша заявка отклонена администратором.")
-    except Exception:
-        pass
+        logger.info(f"Application #{app_id} rejected by {admin_id}. Notification sent to user {app.user_id}.")
+    except Exception as e:
+        logger.error(f"Failed to notify user {app.user_id} about rejection: {e}")
     await callback.answer()
 
 # 2) Просмотр списка пользователей
@@ -132,6 +145,7 @@ async def reject_application(callback: types.CallbackQuery):
 async def view_users(callback: types.CallbackQuery):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
+        logger.warning(f"User {callback.from_user.id} tried to view users without admin rights.")
         return
     async with SessionLocal() as session:
         result = await session.execute(select(User))
@@ -139,6 +153,7 @@ async def view_users(callback: types.CallbackQuery):
 
     if not users:
         await callback.message.answer("Пользователей нет.")
+        logger.info(f"No users found for admin {callback.from_user.id}.")
         await callback.answer()
         return
 
@@ -154,6 +169,7 @@ async def view_users(callback: types.CallbackQuery):
 async def assign_admin_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_superadmin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
+        logger.warning(f"User {callback.from_user.id} tried to assign admin without superadmin rights.")
         return
     await callback.message.answer("Введите ID пользователя, чтобы назначить администратором:")
     await state.set_state("assign_admin_waiting_for_user_id")
@@ -165,16 +181,19 @@ async def assign_admin_confirm(message: types.Message, state: FSMContext):
         user_id = int(message.text)
     except ValueError:
         await message.answer("Введите корректный ID пользователя.")
+        logger.error(f"Invalid user ID input by {message.from_user.id}: {message.text}")
         return
     async with SessionLocal() as session:
         user = await session.get(User, user_id)
         if not user:
             await message.answer("Пользователь не найден.")
+            logger.warning(f"User {user_id} not found for admin {message.from_user.id}.")
         else:
             user.role = "admin"
             session.add(user)
             await session.commit()
             await message.answer(f"Пользователь {user_id} назначен администратором.")
+            logger.info(f"User {message.from_user.id} assigned admin role to user {user_id}.")
     await state.clear()
 
 # 4) Смена ранга пользователя
@@ -188,6 +207,7 @@ RANKS = {
 async def change_rank_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
+        logger.warning(f"User {callback.from_user.id} tried to change rank without admin rights.")
         return
     await callback.message.answer("Введите ID пользователя, чтобы изменить его ранг:")
     await state.set_state("change_rank_waiting_for_user_id")
@@ -199,12 +219,14 @@ async def change_rank_user_id(message: types.Message, state: FSMContext):
         user_id = int(message.text)
     except ValueError:
         await message.answer("Введите корректный ID пользователя.")
+        logger.error(f"Invalid user ID input by {message.from_user.id}: {message.text}")
         return
     async with SessionLocal() as session:
         user = await session.get(User, user_id)
         if not user:
             await message.answer("Пользователь не найден.")
             await state.clear()
+            logger.warning(f"User {user_id} not found for admin {message.from_user.id}.")
             return
         await message.answer(f"Выберите ранг для пользователя {user_id}:\n" + "\n".join(RANKS.keys()))
         await state.update_data(user_id=user_id)
@@ -215,6 +237,7 @@ async def change_rank_select(message: types.Message, state: FSMContext):
     rank = message.text.lower()
     if rank not in RANKS:
         await message.answer(f"Неверный ранг. Выберите из: {', '.join(RANKS.keys())}")
+        logger.error(f"Invalid rank selection by {message.from_user.id}: {rank}")
         return
     data = await state.get_data()
     user_id = data.get("user_id")
@@ -225,6 +248,7 @@ async def change_rank_select(message: types.Message, state: FSMContext):
             session.add(user)
             await session.commit()
             await message.answer(f"Ранг пользователя {user_id} изменен на {rank}.")
+            logger.info(f"User {message.from_user.id} changed rank of user {user_id} to {rank}.")
     await state.clear()
 
 # 5) Выдача и вычитание выплат
@@ -232,6 +256,7 @@ async def change_rank_select(message: types.Message, state: FSMContext):
 async def manage_payout_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
+        logger.warning(f"User {callback.from_user.id} tried to manage payouts without admin rights.")
         return
     await callback.message.answer("Введите ID пользователя для управления выплатой:")
     await state.set_state("payout_waiting_for_user_id")
@@ -243,6 +268,7 @@ async def payout_get_user_id(message: types.Message, state: FSMContext):
         user_id = int(message.text)
     except ValueError:
         await message.answer("Введите корректный ID.")
+        logger.error(f"Invalid user ID input for payout by {message.from_user.id}: {message.text}")
         return
     await state.update_data(user_id=user_id)
     await message.answer("Введите сумму выплаты (для вычета используйте отрицательное число):")
@@ -254,6 +280,7 @@ async def payout_get_amount(message: types.Message, state: FSMContext):
         amount = int(message.text)
     except ValueError:
         await message.answer("Введите корректную сумму (целое число).")
+        logger.error(f"Invalid payout amount input by {message.from_user.id}: {message.text}")
         return
     data = await state.get_data()
     user_id = data.get("user_id")
@@ -263,6 +290,7 @@ async def payout_get_amount(message: types.Message, state: FSMContext):
         if not user:
             await message.answer("Пользователь не найден.")
             await state.clear()
+            logger.warning(f"User {user_id} not found for admin {message.from_user.id}.")
             return
         # Обновляем баланс с учетом ранга
         rank = getattr(user, "user_rank", None)
@@ -276,6 +304,7 @@ async def payout_get_amount(message: types.Message, state: FSMContext):
         session.add(payout_record)
         await session.commit()
         await message.answer(f"Выплата {amount} USDT обновлена (учет ранга: {percent * 100}%). Новый баланс: {user.payout} USDT.")
+        logger.info(f"Payout of {amount} USDT for user {user_id} processed by {admin_id}. New balance: {user.payout} USDT.")
     await state.clear()
 
 # 6) Бан и заморозка пользователя
@@ -283,6 +312,7 @@ async def payout_get_amount(message: types.Message, state: FSMContext):
 async def ban_user_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
+        logger.warning(f"User {callback.from_user.id} tried to ban user without admin rights.")
         return
     await callback.message.answer("Введите ID пользователя для бана или заморозки:")
     await state.set_state("ban_waiting_for_user_id")
@@ -294,6 +324,7 @@ async def ban_user_get_id(message: types.Message, state: FSMContext):
         user_id = int(message.text)
     except ValueError:
         await message.answer("Введите корректный ID.")
+        logger.error(f"Invalid user ID input for ban by {message.from_user.id}: {message.text}")
         return
     await state.update_data(user_id=user_id)
     await message.answer("Введите количество дней для заморозки (0 — чтобы разбанить):")
@@ -305,6 +336,7 @@ async def ban_user_set_days(message: types.Message, state: FSMContext):
         days = int(message.text)
     except ValueError:
         await message.answer("Введите корректное число дней.")
+        logger.error(f"Invalid number of days input for ban by {message.from_user.id}: {message.text}")
         return
     data = await state.get_data()
     user_id = data.get("user_id")
@@ -313,13 +345,16 @@ async def ban_user_set_days(message: types.Message, state: FSMContext):
         if not user:
             await message.answer("Пользователь не найден.")
             await state.clear()
+            logger.warning(f"User {user_id} not found for admin {message.from_user.id}.")
             return
         if days == 0:
             user.banned_until = None
             await message.answer(f"Пользователь {user_id} разбанен.")
+            logger.info(f"User {user_id} unbanned by admin {message.from_user.id}.")
         else:
             user.banned_until = datetime.utcnow() + timedelta(days=days)
             await message.answer(f"Пользователь {user_id} заблокирован на {days} дней.")
+            logger.info(f"User {user_id} banned for {days} days by admin {message.from_user.id}.")
         session.add(user)
         await session.commit()
     await state.clear()
@@ -329,6 +364,7 @@ async def ban_user_set_days(message: types.Message, state: FSMContext):
 async def post_bot_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
+        logger.warning(f"User {callback.from_user.id} tried to post in bot without admin rights.")
         return
     await callback.message.answer("Введите текст поста для бота:")
     await state.set_state("post_bot_waiting_text")
@@ -339,6 +375,7 @@ async def post_bot_send(message: types.Message, state: FSMContext):
     text = message.text
     # Здесь можно добавить рассылку всем пользователям из базы, пока просто ответ
     await message.answer("Пост опубликован в боте:\n\n" + text)
+    logger.info(f"Post sent to bot by admin {message.from_user.id}: {text}")
     await state.clear()
 
 # 8) Постинг в канал
@@ -346,6 +383,7 @@ async def post_bot_send(message: types.Message, state: FSMContext):
 async def post_channel_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
+        logger.warning(f"User {callback.from_user.id} tried to post in channel without admin rights.")
         return
     await callback.message.answer("Введите текст поста для канала:")
     await state.set_state("post_channel_waiting_text")
@@ -357,7 +395,8 @@ async def post_channel_send(message: types.Message, state: FSMContext):
     for ch_id in CHANNEL_IDS:
         try:
             await message.bot.send_message(ch_id, text)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to post in channel {ch_id}: {e}")
     await message.answer("Пост опубликован в канале.")
+    logger.info(f"Post sent to channels by admin {message.from_user.id}: {text}")
     await state.clear()
