@@ -7,7 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, Update
 from aiogram.exceptions import TelegramRetryAfter
 
-from database import init_db, engine, run_bigint_migration
+from database import init_db, engine, run_bigint_migration, ensure_banned_until_column
 from profile import router as profile_router
 from admin import router as admin_router
 
@@ -40,6 +40,9 @@ app = FastAPI()
 async def on_startup():
     logger.info("Запуск миграции bigint...")
     await run_bigint_migration(engine)
+
+    logger.info("Проверка и добавление поля banned_until, если необходимо...")
+    await ensure_banned_until_column()
 
     logger.info("Инициализация базы данных...")
     await init_db()
