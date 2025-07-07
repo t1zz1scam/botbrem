@@ -1,7 +1,7 @@
-import os
+from fastapi import FastAPI, Request, Response
 import logging
 import asyncio
-from fastapi import FastAPI, Request, Response
+import os
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, Update
@@ -10,6 +10,7 @@ from aiogram.exceptions import TelegramRetryAfter
 from database import init_db, engine, run_bigint_migration
 from profile import router as profile_router
 from admin import router as admin_router
+from keyboards import main_menu, admin_panel_kb
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,7 +20,6 @@ if not API_TOKEN:
     raise RuntimeError("BOT_TOKEN env variable is not set")
 
 WEBHOOK_PATH = "/bot-webhook"
-
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 if not WEBHOOK_URL:
     raise RuntimeError("WEBHOOK_URL env variable is not set")
@@ -35,25 +35,20 @@ dp.include_router(admin_router)
 
 app = FastAPI()
 
-
 @app.on_event("startup")
 async def on_startup():
     logger.info("Запуск миграции bigint...")
     await run_bigint_migration(engine)
-
     logger.info("Инициализация базы данных...")
     await init_db()
-
     logger.info(f"Установка webhook: {FULL_WEBHOOK_URL}")
     await bot.set_webhook(FULL_WEBHOOK_URL)
-
     commands = [
         BotCommand(command="start", description="Запустить бота"),
         BotCommand(command="help", description="Помощь"),
     ]
     await bot.set_my_commands(commands)
     logger.info("Команды бота установлены")
-
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -81,7 +76,6 @@ async def on_shutdown():
         logger.error(f"Ошибка при закрытии сессии бота: {e}")
 
     logger.info("Шатдаун завершен")
-
 
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
