@@ -10,10 +10,9 @@ from database import (
     get_top_users, get_total_earned_today, SessionLocal, Application,
     create_user_if_not_exists
 )
+from config import SUPERADMIN_ID
 
 router = Router()
-
-SUPERADMIN_ID = int(os.getenv("SUPERADMIN_ID", "0"))
 
 class EditProfile(StatesGroup):
     name = State()
@@ -68,7 +67,7 @@ async def profile(message: types.Message):
         f"💼 Кошелек: {user.contact or 'не указан'}\n"
         f"💸 Заработано: {user.payout or 0:.2f} USDT\n"
         f"🎖 Звание: {user.role or 'Новичок'}\n"
-        f"🏅 Ранг: {getattr(user, 'rank', 'не назначен')}"
+        f"🏅 Ранг: {getattr(user, 'user_rank', 'не назначен')}"
     )
     await message.answer(text, reply_markup=profile_kb())
 
