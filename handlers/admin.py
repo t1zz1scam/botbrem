@@ -120,11 +120,13 @@ async def assign_admin_start(callback: types.CallbackQuery, state: FSMContext):
 @router.message(F.state == "assign_admin_waiting_for_user_id")
 async def assign_admin_confirm(message: types.Message, state: FSMContext):
     try:
-        user_id = int(message.text)
+        user_id = int(message.text)  # Преобразуем введенный текст в ID
     except ValueError:
-        await message.answer("Введите корректный ID пользователя.")
+        await message.answer("Введите корректный ID пользователя.")  # В случае ошибки
         logger.error(f"Invalid user ID input by {message.from_user.id}: {message.text}")
-        return
+        return  # Ожидаем корректный ввод
+
+    # Проверка существования пользователя
     async with SessionLocal() as session:
         user = await session.get(User, user_id)
         if not user:
@@ -136,7 +138,7 @@ async def assign_admin_confirm(message: types.Message, state: FSMContext):
             await session.commit()
             await message.answer(f"Пользователь {user_id} назначен администратором.")
             logger.info(f"User {message.from_user.id} assigned admin role to user {user_id}.")
-    await state.clear()
+    await state.clear()  # Очищаем состояние после завершения
 
 # 4) Смена ранга пользователя
 RANKS = {
@@ -160,19 +162,22 @@ async def change_rank_user_id(message: types.Message, state: FSMContext):
     try:
         user_id = int(message.text)
     except ValueError:
-        await message.answer("Введите корректный ID пользователя.")
+        await message.answer("Введите корректный ID пользователя.")  # В случае ошибки
         logger.error(f"Invalid user ID input by {message.from_user.id}: {message.text}")
         return
+
+    # Если пользователь найден, продолжаем
     async with SessionLocal() as session:
         user = await session.get(User, user_id)
         if not user:
             await message.answer("Пользователь не найден.")
-            await state.clear()
+            await state.clear()  # Очистим состояние, чтобы не сбить дальнейшие переходы
             logger.warning(f"User {user_id} not found for admin {message.from_user.id}.")
             return
+
         await message.answer(f"Выберите ранг для пользователя {user_id}:\n" + "\n".join(RANKS.keys()))
         await state.update_data(user_id=user_id)
-        await state.set_state("change_rank_waiting_for_rank")
+        await state.set_state("change_rank_waiting_for_rank")  # Переход к следующему состоянию
 
 @router.message(F.state == "change_rank_waiting_for_rank")
 async def change_rank_select(message: types.Message, state: FSMContext):
@@ -181,8 +186,11 @@ async def change_rank_select(message: types.Message, state: FSMContext):
         await message.answer(f"Неверный ранг. Выберите из: {', '.join(RANKS.keys())}")
         logger.error(f"Invalid rank selection by {message.from_user.id}: {rank}")
         return
+
     data = await state.get_data()
     user_id = data.get("user_id")
+
+    # Изменяем ранг пользователя
     async with SessionLocal() as session:
         user = await session.get(User, user_id)
         if user:
