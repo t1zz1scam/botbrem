@@ -53,29 +53,31 @@ class News(Base):
     sent = Column(Boolean, default=False)
 
 async def init_db():
+    """Создает таблицы, если их еще нет"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
 async def run_bigint_migration(engine):
+    """Миграция колонок user_id с integer на bigint, если нужно"""
     async with engine.begin() as conn:
         await conn.execute(text("""
             DO $$
             BEGIN
                 IF EXISTS (
                     SELECT 1 FROM information_schema.columns
-                      WHERE table_name='users' AND column_name='user_id' AND data_type='integer'
+                    WHERE table_name='users' AND column_name='user_id' AND data_type='integer'
                 ) THEN
                     ALTER TABLE users ALTER COLUMN user_id TYPE BIGINT;
                 END IF;
                 IF EXISTS (
                     SELECT 1 FROM information_schema.columns
-                      WHERE table_name='applications' AND column_name='user_id' AND data_type='integer'
+                    WHERE table_name='applications' AND column_name='user_id' AND data_type='integer'
                 ) THEN
                     ALTER TABLE applications ALTER COLUMN user_id TYPE BIGINT;
                 END IF;
                 IF EXISTS (
                     SELECT 1 FROM information_schema.columns
-                      WHERE table_name='payouts' AND column_name='user_id' AND data_type='integer'
+                    WHERE table_name='payouts' AND column_name='user_id' AND data_type='integer'
                 ) THEN
                     ALTER TABLE payouts ALTER COLUMN user_id TYPE BIGINT;
                 END IF;
@@ -84,27 +86,45 @@ async def run_bigint_migration(engine):
         """))
 
 async def ensure_banned_until_column(engine):
+    """Добавляет колонку banned_until, если её нет"""
     async with engine.begin() as conn:
         result = await conn.execute(text("""
             SELECT column_name
-              FROM information_schema.columns
-             WHERE table_name='users' AND column_name='banned_until'
+            FROM information_schema.columns
+            WHERE table_name='users' AND column_name='banned_until'
         """))
         if not result.scalar():
             await conn.execute(text("""
                 ALTER TABLE users ADD COLUMN banned_until TIMESTAMP NULL;
             """))
 
-async def ensure_user_rank_rename(engine):
+async def ensure_user_rank_column(engine):
+    """
+    Переименовывает колонку rank в user_rank, если есть старая.
+    Если нет колонки user_rank, добавляет новую.
+    """
     async with engine.begin() as conn:
-        result = await conn.execute(text("""
+        # Проверяем есть ли старая колонка rank
+        result_rank = await conn.execute(text("""
             SELECT column_name
-              FROM information_schema.columns
-             WHERE table_name='users' AND column_name='rank'
+            FROM information_schema.columns
+            WHERE table_name='users' AND column_name='rank'
         """))
-        if result.scalar():
+        if result_rank.scalar():
             await conn.execute(text("""
                 ALTER TABLE users RENAME COLUMN rank TO user_rank;
+            """))
+            return  # Если переименовали, выходим
+
+        # Проверяем есть ли колонка user_rank
+        result_user_rank = await conn.execute(text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name='users' AND column_name='user_rank'
+        """))
+        if not result_user_rank.scalar():
+            await conn.execute(text("""
+                ALTER TABLE users ADD COLUMN user_rank VARCHAR(255) NULL;
             """))
 
 async def get_user_by_id(user_id: int):
@@ -151,11 +171,11 @@ async def get_top_users(period="day"):
     async with SessionLocal() as session:
         result = await session.execute(
             select(User.name, func.sum(Payout.amount).label("earned"))
-              .join(Payout)
-              .where(Payout.created_at >= since)
-              .group_by(User.user_id)
-              .order_by(desc("earned"))
-              .limit(10)
+            .join(Payout)
+            .where(Payout.created_at >= since)
+            .group_by(User.user_id)
+            .order_by(desc("earned"))
+            .limit(10)
         )
         return result.mappings().all()
 
