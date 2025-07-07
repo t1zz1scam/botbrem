@@ -1,88 +1,69 @@
-import os
 import logging
-import asyncio
-from fastapi import FastAPI, Request, Response
+import os
 from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand, Update
-from aiogram.exceptions import TelegramRetryAfter
+from aiogram.enums import ParseMode
+from aiogram.types import BotCommand
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
+from dotenv import load_dotenv
 
 from database import (
-    init_db, engine,
-    run_bigint_migration,
-    ensure_banned_until_column,
-    ensure_user_rank_rename
+    init_db, run_bigint_migration, ensure_banned_until_column,
+    create_user_if_not_exists
 )
-from profile import router as profile_router
-from admin import router as admin_router
+from handlers import router as handlers_router  # <-- твой router с хендлерами
+
+load_dotenv()
+
+TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_PATH = f"/bot-webhook"
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL") + WEBHOOK_PATH
+
+bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+dp = Dispatcher()
+dp.include_router(handlers_router)
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-API_TOKEN = os.getenv("BOT_TOKEN")
-if not API_TOKEN:
-    raise RuntimeError("BOT_TOKEN env variable is not set")
-
-WEBHOOK_PATH = "/bot-webhook"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-if not WEBHOOK_URL:
-    raise RuntimeError("WEBHOOK_URL env variable is not set")
-
-FULL_WEBHOOK_URL = WEBHOOK_URL + WEBHOOK_PATH
-
-bot = Bot(token=API_TOKEN, parse_mode="HTML")
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
-dp.include_router(profile_router)
-dp.include_router(admin_router)
-
-app = FastAPI()
-
-@app.on_event("startup")
 async def on_startup():
-    logger.info("Запуск миграции bigint...")
-    await run_bigint_migration(engine)
-    logger.info("Проверка banned_until...")
-    await ensure_banned_until_column(engine)
-    logger.info("Переименование rank → user_rank...")
-    await ensure_user_rank_rename(engine)
-    logger.info("Инициализация базы...")
+    logging.info("▶ Инициализация базы данных и миграций...")
     await init_db()
-    logger.info(f"Установка webhook: {FULL_WEBHOOK_URL}")
-    await bot.set_webhook(FULL_WEBHOOK_URL)
+    await run_bigint_migration(engine=bot.session.engine)
+    await ensure_banned_until_column(engine=bot.session.engine)
+    await bot.set_webhook(WEBHOOK_URL, secret_token=WEBHOOK_SECRET)
+
+    # Установка команд
     await bot.set_my_commands([
-        BotCommand("start", "Запустить бота"),
-        BotCommand("help", "Помощь")
+        BotCommand(command="start", description="Запустить бота"),
+        BotCommand(command="help", description="Помощь")
     ])
-    logger.info("Команды установлены")
 
-@app.on_event("shutdown")
-async def on_shutdown():
-    logger.info("Удаляем webhook...")
-    try:
-        await bot.delete_webhook()
-    except TelegramRetryAfter as e:
-        logger.warning(f"Flood limit, ждать {e.timeout}s")
-        await asyncio.sleep(e.timeout)
-        try:
-            await bot.delete_webhook()
-        except Exception as ex:
-            logger.error(f"Повторное удаление не удалось: {ex}")
-    logger.info("Закрываем FSM и сессии...")
-    try: await storage.close()
-    except: pass
-    try: await bot.session.close()
-    except: pass
-    logger.info("Шатдаун завершён")
+    # Убедиться, что superadmin есть в БД
+    superadmin_id = int(os.getenv("SUPER_ADMIN_ID", 0))
+    if superadmin_id:
+        await create_user_if_not_exists(superadmin_id)
+        logging.info(f"👑 Суперадмин {superadmin_id} зарегистрирован")
 
-@app.post(WEBHOOK_PATH)
-async def bot_webhook(request: Request):
-    try:
-        data = await request.json()
-        logger.info(f"Получен update: {data}")
-        upd = Update(**data)
-        await dp.feed_update(bot, upd)
-    except Exception as e:
-        logger.error(f"Ошибка обработки update: {e}", exc_info=True)
-        return Response(status_code=500)
-    return Response(status_code=200)
+    logging.info("✅ Бот успешно запущен!")
+
+async def bot_webhook(request):
+    update = await request.json()
+    await dp.feed_update(bot, update, request)
+    return web.Response()
+
+async def on_shutdown(app):
+    await bot.session.close()
+
+def create_app():
+    app = web.Application()
+    app.on_startup.append(lambda _: on_startup())
+    app.on_shutdown.append(on_shutdown)
+
+    SimpleRequestHandler(dispatcher=dp, bot=bot, secret_token=WEBHOOK_SECRET).register(app, path=WEBHOOK_PATH)
+
+    return app
+
+if __name__ == "__main__":
+    app = create_app()
+    web.run_app(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
