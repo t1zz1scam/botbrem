@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timedelta
 from sqlalchemy import (
     Column, Integer, BigInteger, String, Text, Boolean, DateTime,
-    ForeignKey, func, select, update, desc, text
+    ForeignKey, func, select, update, desc, text, Numeric
 )
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
@@ -12,38 +12,46 @@ Base = declarative_base()
 engine = create_async_engine(DATABASE_URL, future=True)
 SessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
+
 class User(Base):
     __tablename__ = "users"
-    user_id = Column(BigInteger, primary_key=True)
+    user_id = Column(BigInteger, primary_key=True)  # BigInteger для избежания переполнения
     name = Column(String, nullable=True)
     contact = Column(String, nullable=True)
     role = Column(String, default="user")
     payout = Column(BigInteger, default=0)
     joined_at = Column(DateTime, server_default=func.now())
     banned_until = Column(DateTime, nullable=True)
-    user_rank = Column(String, nullable=True)
-    applications = relationship("Application", back_populates="user")
-    payouts_hist = relationship("Payout", back_populates="user")
+    user_rank = Column(String, nullable=True)  # убедился, что это user_rank, не rank
+    applications = relationship("Application", back_populates="user", cascade="all, delete-orphan")
+    payouts_hist = relationship("Payout", back_populates="user", cascade="all, delete-orphan")
+
 
 class Application(Base):
     __tablename__ = "applications"
     id = Column(Integer, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey("users.user_id"))
+    user_id = Column(BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     message = Column(Text)
     status = Column(String, default="pending")
     created_at = Column(DateTime, server_default=func.now())
-    resolved_by = Column(BigInteger, nullable=True)
+    resolved_by = Column(BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
     resolved_at = Column(DateTime, nullable=True)
-    user = relationship("User", back_populates="applications")
+
+    user = relationship("User", foreign_keys=[user_id], back_populates="applications")
+    resolver = relationship("User", foreign_keys=[resolved_by])
+
 
 class Payout(Base):
     __tablename__ = "payouts"
     id = Column(Integer, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey("users.user_id"))
-    amount = Column(BigInteger)
-    issued_by = Column(BigInteger)
+    user_id = Column(BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)  # числовой формат для сумм, лучше decimal
+    issued_by = Column(BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
-    user = relationship("User", back_populates="payouts_hist")
+
+    user = relationship("User", foreign_keys=[user_id], back_populates="payouts_hist")
+    issuer = relationship("User", foreign_keys=[issued_by])
+
 
 class News(Base):
     __tablename__ = "news"
@@ -52,10 +60,12 @@ class News(Base):
     created_at = Column(DateTime, server_default=func.now())
     sent = Column(Boolean, default=False)
 
+
 async def init_db():
     """Создает таблицы, если их еще нет"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
 
 async def run_bigint_migration(engine):
     """Миграция колонок user_id с integer на bigint, если нужно"""
@@ -85,6 +95,7 @@ async def run_bigint_migration(engine):
             $$;
         """))
 
+
 async def ensure_banned_until_column(engine):
     """Добавляет колонку banned_until, если её нет"""
     async with engine.begin() as conn:
@@ -97,6 +108,7 @@ async def ensure_banned_until_column(engine):
             await conn.execute(text("""
                 ALTER TABLE users ADD COLUMN banned_until TIMESTAMP NULL;
             """))
+
 
 async def ensure_user_rank_column(engine):
     """
@@ -127,10 +139,12 @@ async def ensure_user_rank_column(engine):
                 ALTER TABLE users ADD COLUMN user_rank VARCHAR(255) NULL;
             """))
 
+
 async def get_user_by_id(user_id: int):
     async with SessionLocal() as session:
         result = await session.execute(select(User).where(User.user_id == user_id))
         return result.scalar_one_or_none()
+
 
 async def create_user_if_not_exists(user_id: int):
     async with SessionLocal() as session:
@@ -150,15 +164,18 @@ async def create_user_if_not_exists(user_id: int):
                 user.role = "superadmin"
             return user
 
+
 async def update_user_name(user_id: int, name: str):
     async with SessionLocal() as session:
         await session.execute(update(User).where(User.user_id == user_id).values(name=name))
         await session.commit()
 
+
 async def update_user_wallet(user_id: int, wallet: str):
     async with SessionLocal() as session:
         await session.execute(update(User).where(User.user_id == user_id).values(contact=wallet))
         await session.commit()
+
 
 async def get_top_users(period="day"):
     now = datetime.utcnow()
@@ -178,6 +195,7 @@ async def get_top_users(period="day"):
             .limit(10)
         )
         return result.mappings().all()
+
 
 async def get_total_earned_today():
     today = datetime.utcnow().date()
