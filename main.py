@@ -7,15 +7,22 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler
 from aiohttp import web
 from dotenv import load_dotenv
 
-from database import init_db, run_bigint_migration, ensure_banned_until_column, ensure_user_rank_rename, engine, create_user_if_not_exists
-from handlers import router as handlers_router
+from database import (
+    init_db,
+    run_bigint_migration,
+    ensure_banned_until_column,
+    ensure_user_rank_rename,
+    engine,
+    create_user_if_not_exists,
+)
+from handlers import router as handlers_router  # Импорт объединённого роутера из папки handlers
 from config import BOT_TOKEN, WEBHOOK_URL, SUPERADMIN_ID
 
 load_dotenv()
 
 bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
-dp.include_router(handlers_router)
+dp.include_router(handlers_router)  # Подключаем все роутеры из handlers
 
 logging.basicConfig(level=logging.INFO)
 
@@ -51,6 +58,7 @@ def create_app():
     app = web.Application()
     app.on_startup.append(lambda _: on_startup())
     app.on_shutdown.append(on_shutdown)
+    # Регистрируем webhook на /bot-webhook
     SimpleRequestHandler(dispatcher=dp, bot=bot, secret_token=None).register(app, path="/bot-webhook")
     return app
 
