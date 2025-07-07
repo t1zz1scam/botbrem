@@ -6,6 +6,8 @@ from aiogram.types import BotCommand
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse
+from aiogram.types import Update
+from fastapi import Request
 
 # Импорты из проекта: база и роутеры
 from database import (
@@ -75,7 +77,8 @@ async def on_shutdown():
 # --- Обработка webhook запросов от Telegram ---
 @app.post("/bot-webhook")
 async def bot_webhook(request: Request):
-    update = await request.json()
+    data = await request.json()
+    update = Update(**data)  # Преобразуем dict в объект Update aiogram
     await dp.feed_update(bot=bot, update=update)
     return JSONResponse(content={"status": "ok"})
 
