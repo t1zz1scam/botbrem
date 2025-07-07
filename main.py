@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 
 from config import BOT_TOKEN, DATABASE_URL
-from handlers.admin import handlers_router
+from handlers.admin import router
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,7 +17,7 @@ app = FastAPI()
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
 dp = Dispatcher(bot)
 
-dp.include_router(handlers_router)
+dp.include_router(router)
 
 engine = create_async_engine(DATABASE_URL, echo=True, future=True)
 
