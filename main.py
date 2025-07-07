@@ -68,5 +68,10 @@ async def on_startup():
 async def bot_webhook(request: Request):
     data = await request.json()
     update = Update(**data)
-    await dp.feed_update(update)
+    try:
+        await dp.feed_update(bot, update)
+    except Exception as e:
+        logging.error(f"Ошибка при обработке update: {e}")
+        return JSONResponse(content={"status": "error", "detail": str(e)}, status_code=500)
     return JSONResponse(content={"status": "ok"})
+
