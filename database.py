@@ -6,12 +6,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from config import DATABASE_URL, SUPERADMIN_ID
 
 Base = declarative_base()
-engine = create_async_engine(os.getenv("DATABASE_URL"), future=True)
+engine = create_async_engine(DATABASE_URL, future=True)
 SessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-
-SUPER_ADMIN_ID = int(os.getenv("SUPER_ADMIN_ID", 0))
 
 class User(Base):
     __tablename__ = "users"
@@ -22,7 +21,7 @@ class User(Base):
     payout = Column(BigInteger, default=0)
     joined_at = Column(DateTime, server_default=func.now())
     banned_until = Column(DateTime, nullable=True)
-    user_rank = Column(String, nullable=True)  # Старый "rank" → user_rank
+    user_rank = Column(String, nullable=True)
     applications = relationship("Application", back_populates="user")
     payouts_hist = relationship("Payout", back_populates="user")
 
@@ -108,7 +107,6 @@ async def ensure_user_rank_rename(engine):
                 ALTER TABLE users RENAME COLUMN rank TO user_rank;
             """))
 
-# Data-access functions (get_user_by_id, etc.)
 async def get_user_by_id(user_id: int):
     async with SessionLocal() as session:
         result = await session.execute(select(User).where(User.user_id == user_id))
@@ -118,13 +116,13 @@ async def create_user_if_not_exists(user_id: int):
     async with SessionLocal() as session:
         user = await get_user_by_id(user_id)
         if not user:
-            role = "superadmin" if user_id == SUPER_ADMIN_ID else "user"
+            role = "superadmin" if user_id == SUPERADMIN_ID else "user"
             new_user = User(user_id=user_id, role=role)
             session.add(new_user)
             await session.commit()
             return new_user
         else:
-            if user.user_id == SUPER_ADMIN_ID and user.role != "superadmin":
+            if user.user_id == SUPERADMIN_ID and user.role != "superadmin":
                 await session.execute(
                     update(User).where(User.user_id == user_id).values(role="superadmin")
                 )
