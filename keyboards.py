@@ -8,5 +8,7 @@ def main_menu(role="user"):
 
 admin_panel_kb = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="📬 Заявки", callback_data="view_applications")],
-    # добавь другие кнопки админ-панели тут
+    [InlineKeyboardButton(text="👥 Пользователи", callback_data="view_users")],
+    [InlineKeyboardButton(text="✏ Управление пользователями", callback_data="manage_users")],
+    [InlineKeyboardButton(text="📢 Посты", callback_data="admin_posts")],
 ])
