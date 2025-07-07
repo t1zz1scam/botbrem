@@ -22,7 +22,7 @@ class User(Base):
     payout = Column(BigInteger, default=0)
     joined_at = Column(DateTime, server_default=func.now())
     banned_until = Column(DateTime, nullable=True)
-    user_rank = Column(String, nullable=True)  # <== исправлено
+    user_rank = Column(String, nullable=True)  # Переименовано с 'rank'
     applications = relationship("Application", back_populates="user")
     payouts_hist = relationship("Payout", back_populates="user")
 
@@ -94,6 +94,18 @@ async def ensure_banned_until_column(engine):
         if not exists:
             await conn.execute(text("""
                 ALTER TABLE users ADD COLUMN banned_until TIMESTAMP NULL;
+            """))
+
+async def ensure_user_rank_rename(engine):
+    async with engine.begin() as conn:
+        result = await conn.execute(text("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='users' AND column_name='rank'
+        """))
+        exists = result.scalar()
+        if exists:
+            await conn.execute(text("""
+                ALTER TABLE users RENAME COLUMN rank TO user_rank;
             """))
 
 async def get_user_by_id(user_id: int):
