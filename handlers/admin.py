@@ -10,8 +10,8 @@ from config import CHANNEL_IDS
 
 router = Router()
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
+# Настройка логирования (вывод в консоль)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Клавиатура админ-панели
@@ -80,64 +80,6 @@ async def view_applications(callback: types.CallbackQuery):
         ])
         await callback.message.answer(text, reply_markup=keyboard)
 
-    await callback.answer()
-
-@router.callback_query(F.data.startswith("approve_"))
-async def approve_application(callback: types.CallbackQuery):
-    if not await is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
-        logger.warning(f"User {callback.from_user.id} tried to approve application without admin rights.")
-        return
-
-    app_id = int(callback.data.split("_")[1])
-    admin_id = callback.from_user.id
-
-    async with SessionLocal() as session:
-        await session.execute(
-            update(Application).where(Application.id == app_id).values(
-                status="approved",
-                resolved_by=admin_id,
-                resolved_at=datetime.utcnow()
-            )
-        )
-        await session.commit()
-        app = await session.get(Application, app_id)
-
-    await callback.message.answer(f"Заявка #{app_id} одобрена.")
-    try:
-        await callback.bot.send_message(app.user_id, "Ваша заявка одобрена администратором!")
-        logger.info(f"Application #{app_id} approved by {admin_id}. Notification sent to user {app.user_id}.")
-    except Exception as e:
-        logger.error(f"Failed to notify user {app.user_id} about approval: {e}")
-    await callback.answer()
-
-@router.callback_query(F.data.startswith("reject_"))
-async def reject_application(callback: types.CallbackQuery):
-    if not await is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
-        logger.warning(f"User {callback.from_user.id} tried to reject application without admin rights.")
-        return
-
-    app_id = int(callback.data.split("_")[1])
-    admin_id = callback.from_user.id
-
-    async with SessionLocal() as session:
-        await session.execute(
-            update(Application).where(Application.id == app_id).values(
-                status="rejected",
-                resolved_by=admin_id,
-                resolved_at=datetime.utcnow()
-            )
-        )
-        await session.commit()
-        app = await session.get(Application, app_id)
-
-    await callback.message.answer(f"Заявка #{app_id} отклонена.")
-    try:
-        await callback.bot.send_message(app.user_id, "Ваша заявка отклонена администратором.")
-        logger.info(f"Application #{app_id} rejected by {admin_id}. Notification sent to user {app.user_id}.")
-    except Exception as e:
-        logger.error(f"Failed to notify user {app.user_id} about rejection: {e}")
     await callback.answer()
 
 # 2) Просмотр списка пользователей
