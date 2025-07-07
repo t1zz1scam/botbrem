@@ -42,11 +42,7 @@ def get_main_menu(is_new: bool, role: str = "user"):
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
     user = await create_user_if_not_exists(message.from_user.id)
-    if user.user_id == SUPERADMIN_ID or user.role in ("admin", "superadmin"):
-        is_new = False
-    else:
-        is_new = not user.name and not user.contact
-
+    is_new = not user.name and not user.contact if user.role not in ("admin", "superadmin") else False
     await message.answer(
         "👋 Добро пожаловать! Выберите действие:",
         reply_markup=get_main_menu(is_new, role=user.role)
@@ -55,18 +51,17 @@ async def cmd_start(message: types.Message):
 @router.message(F.text == "👤 Профиль")
 async def profile(message: types.Message):
     user = await get_user_by_id(message.from_user.id)
-    if hasattr(user, "banned_until") and user.banned_until:
-        from datetime import datetime
-        if user.banned_until > datetime.utcnow():
-            await message.answer("🚫 Вы заблокированы и не можете пользоваться ботом.")
-            return
+    from datetime import datetime
+    if user.banned_until and user.banned_until > datetime.utcnow():
+        await message.answer("🚫 Вы заблокированы и не можете пользоваться ботом.")
+        return
 
     text = (
         f"<b>👤 Ваш профиль</b>\n\n"
         f"📡 Имя: {user.name or 'не указано'}\n"
         f"💼 Кошелек: {user.contact or 'не указан'}\n"
-        f"💸 Заработано: {user.payout or 0:.2f} USDT\n"
-        f"🎖 Звание: {user.role or 'Новичок'}\n"
+        f"💸 Заработано: {user.payout or 0} USDT\n"
+        f"🎖 Роль: {user.role or 'Новичок'}\n"
         f"🏅 Ранг: {getattr(user, 'user_rank', 'не назначен')}"
     )
     await message.answer(text, reply_markup=profile_kb())
@@ -103,14 +98,17 @@ async def top_users(callback: types.CallbackQuery):
     else:
         text = "<b>🏆 Топ пользователей за сегодня:</b>\n\n"
         for i, row in enumerate(top, 1):
-            text += f"{i}. {row['name']} — {row['earned']:.2f} USDT\n"
+            name = row['name'] or "Не указано"
+            earned = float(row['earned']) if row['earned'] else 0
+            text += f"{i}. {name} — {earned:.2f} USDT\n"
     await callback.message.answer(text)
     await callback.answer()
 
 @router.callback_query(F.data == "total_today")
 async def total_today(callback: types.CallbackQuery):
     total = await get_total_earned_today()
-    text = f"💰 Общая сумма заработка всех пользователей за сегодня: {total or 0:.2f} USDT"
+    total_val = float(total) if total else 0
+    text = f"💰 Общая сумма заработка всех пользователей за сегодня: {total_val:.2f} USDT"
     await callback.message.answer(text)
     await callback.answer()
 
