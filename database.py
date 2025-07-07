@@ -22,7 +22,7 @@ class User(Base):
     payout = Column(BigInteger, default=0)
     joined_at = Column(DateTime, server_default=func.now())
     banned_until = Column(DateTime, nullable=True)
-    user_rank = Column(String, nullable=True)  # Переименовано с 'rank'
+    user_rank = Column(String, nullable=True)  # Старый "rank" → user_rank
     applications = relationship("Application", back_populates="user")
     payouts_hist = relationship("Payout", back_populates="user")
 
@@ -64,19 +64,19 @@ async def run_bigint_migration(engine):
             BEGIN
                 IF EXISTS (
                     SELECT 1 FROM information_schema.columns
-                    WHERE table_name='users' AND column_name='user_id' AND data_type='integer'
+                      WHERE table_name='users' AND column_name='user_id' AND data_type='integer'
                 ) THEN
                     ALTER TABLE users ALTER COLUMN user_id TYPE BIGINT;
                 END IF;
                 IF EXISTS (
                     SELECT 1 FROM information_schema.columns
-                    WHERE table_name='applications' AND column_name='user_id' AND data_type='integer'
+                      WHERE table_name='applications' AND column_name='user_id' AND data_type='integer'
                 ) THEN
                     ALTER TABLE applications ALTER COLUMN user_id TYPE BIGINT;
                 END IF;
                 IF EXISTS (
                     SELECT 1 FROM information_schema.columns
-                    WHERE table_name='payouts' AND column_name='user_id' AND data_type='integer'
+                      WHERE table_name='payouts' AND column_name='user_id' AND data_type='integer'
                 ) THEN
                     ALTER TABLE payouts ALTER COLUMN user_id TYPE BIGINT;
                 END IF;
@@ -87,11 +87,11 @@ async def run_bigint_migration(engine):
 async def ensure_banned_until_column(engine):
     async with engine.begin() as conn:
         result = await conn.execute(text("""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name='users' AND column_name='banned_until'
+            SELECT column_name
+              FROM information_schema.columns
+             WHERE table_name='users' AND column_name='banned_until'
         """))
-        exists = result.scalar()
-        if not exists:
+        if not result.scalar():
             await conn.execute(text("""
                 ALTER TABLE users ADD COLUMN banned_until TIMESTAMP NULL;
             """))
@@ -99,15 +99,16 @@ async def ensure_banned_until_column(engine):
 async def ensure_user_rank_rename(engine):
     async with engine.begin() as conn:
         result = await conn.execute(text("""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name='users' AND column_name='rank'
+            SELECT column_name
+              FROM information_schema.columns
+             WHERE table_name='users' AND column_name='rank'
         """))
-        exists = result.scalar()
-        if exists:
+        if result.scalar():
             await conn.execute(text("""
                 ALTER TABLE users RENAME COLUMN rank TO user_rank;
             """))
 
+# Data-access functions (get_user_by_id, etc.)
 async def get_user_by_id(user_id: int):
     async with SessionLocal() as session:
         result = await session.execute(select(User).where(User.user_id == user_id))
@@ -125,9 +126,7 @@ async def create_user_if_not_exists(user_id: int):
         else:
             if user.user_id == SUPER_ADMIN_ID and user.role != "superadmin":
                 await session.execute(
-                    update(User)
-                    .where(User.user_id == user_id)
-                    .values(role="superadmin")
+                    update(User).where(User.user_id == user_id).values(role="superadmin")
                 )
                 await session.commit()
                 user.role = "superadmin"
@@ -154,18 +153,18 @@ async def get_top_users(period="day"):
     async with SessionLocal() as session:
         result = await session.execute(
             select(User.name, func.sum(Payout.amount).label("earned"))
-            .join(Payout)
-            .where(Payout.created_at >= since)
-            .group_by(User.user_id)
-            .order_by(desc("earned"))
-            .limit(10)
+              .join(Payout)
+              .where(Payout.created_at >= since)
+              .group_by(User.user_id)
+              .order_by(desc("earned"))
+              .limit(10)
         )
         return result.mappings().all()
 
 async def get_total_earned_today():
     today = datetime.utcnow().date()
     async with SessionLocal() as session:
-        result = await session.execute(
+        res = await session.execute(
             select(func.sum(Payout.amount)).where(func.date(Payout.created_at) == today)
         )
-        return result.scalar()
+        return res.scalar()
