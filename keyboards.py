@@ -8,7 +8,11 @@ def main_menu(role="user"):
 
 admin_panel_kb = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="📬 Заявки", callback_data="view_applications")],
-    [InlineKeyboardButton(text="👥 Пользователи", callback_data="view_users")],
-    [InlineKeyboardButton(text="✏ Управление пользователями", callback_data="manage_users")],
-    [InlineKeyboardButton(text="📢 Посты", callback_data="admin_posts")],
+    [InlineKeyboardButton(text="👥 Список пользователей", callback_data="view_users")],
+    [InlineKeyboardButton(text="➕ Назначить админа", callback_data="assign_admin")],
+    [InlineKeyboardButton(text="🔧 Изменить ранг пользователя", callback_data="change_rank")],
+    [InlineKeyboardButton(text="💰 Выдача / Вычитание выплат", callback_data="manage_payout")],
+    [InlineKeyboardButton(text="🚫 Бан / Заморозка пользователя", callback_data="ban_user")],
+    [InlineKeyboardButton(text="📝 Пост в бота", callback_data="post_bot")],
+    [InlineKeyboardButton(text="📢 Пост в канал", callback_data="post_channel")],
 ])
