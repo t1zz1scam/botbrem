@@ -22,7 +22,7 @@ class User(Base):
     payout = Column(BigInteger, default=0)
     joined_at = Column(DateTime, server_default=func.now())
     banned_until = Column(DateTime, nullable=True)
-    rank = Column(String, nullable=True)
+    user_rank = Column(String, nullable=True)  # <== исправлено
     applications = relationship("Application", back_populates="user")
     payouts_hist = relationship("Payout", back_populates="user")
 
@@ -86,7 +86,6 @@ async def run_bigint_migration(engine):
 
 async def ensure_banned_until_column(engine):
     async with engine.begin() as conn:
-        # Проверяем, есть ли столбец banned_until
         result = await conn.execute(text("""
             SELECT column_name FROM information_schema.columns
             WHERE table_name='users' AND column_name='banned_until'
