@@ -62,5 +62,7 @@ def create_app():
     SimpleRequestHandler(dispatcher=dp, bot=bot, secret_token=None).register(app, path="/bot-webhook")
     return app
 
+app = create_app()  # Вот эта строка — чтобы uvicorn мог найти ASGI приложение
+
 if __name__ == "__main__":
-    web.run_app(create_app(), host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    web.run_app(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
