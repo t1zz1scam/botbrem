@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
-dp = Dispatcher(bot)
+dp = Dispatcher()
+
 
 dp.include_router(router)
 
