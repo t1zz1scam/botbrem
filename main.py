@@ -8,8 +8,7 @@ from sqlalchemy import text
 
 # Конфиги
 from config import BOT_TOKEN, DATABASE_URL
-from handlers.admin import router as admin_router
-from handlers.profile import router as profile_router  # Профильный router
+from handlers import router as handlers_router  # Импортируем единый router с админом и профилем
 
 # Настраиваем логирование
 logging.basicConfig(level=logging.INFO)
@@ -23,10 +22,9 @@ bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
 # Dispatcher без передачи бота напрямую — правильно для aiogram 3.x
 dp = Dispatcher()
 
-# Подключаем один и тот же router только один раз
-# 💡 Важно: каждый router можно подключать только один раз!
-dp.include_router(admin_router)     # Админка
-dp.include_router(profile_router)  # Профиль и заявки
+# Подключаем единый router, где уже собраны все подроутеры (admin, profile и др.)
+# 💡 Важно: router подключается только один раз, чтобы избежать RuntimeError
+dp.include_router(handlers_router)
 
 # Создаем подключение к базе данных
 engine = create_async_engine(DATABASE_URL, echo=True, future=True)
@@ -79,7 +77,8 @@ async def bot_webhook(request: Request):
     try:
         data = await request.json()
         update = Update(**data)
-        await dp.feed_update(bot, update)  # ⬅ правильно передаем bot
+        # feed_update принимает bot и update, чтобы передать в диспетчер
+        await dp.feed_update(bot, update)
     except Exception as e:
         logging.error(f"❌ Ошибка в webhook: {e}")
         return JSONResponse(content={"status": "error", "detail": str(e)}, status_code=500)
