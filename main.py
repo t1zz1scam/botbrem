@@ -146,4 +146,3 @@ async def check_webhook():
     except Exception as e:
         logger.error(f"Error checking webhook: {e}")
         return {"status": "error", "detail": str(e)}
-
