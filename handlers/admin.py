@@ -13,6 +13,16 @@ router = Router()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Обработчик для получения номера телефона
+@router.message(F.entities)
+async def handle_phone_number(message: types.Message):
+    # Проверяем, есть ли в сообщении телефон
+    phone_entity = next((entity for entity in message.entities if entity.type == 'phone_number'), None)
+    if phone_entity:
+        phone_number = message.text[phone_entity.offset:phone_entity.offset + phone_entity.length]
+        await message.answer(f"Вы отправили номер телефона: {phone_number}")
+        logger.info(f"Phone number received: {phone_number} from user {message.from_user.id}")
+
 # Клавиатура админ-панели
 admin_panel_kb = InlineKeyboardMarkup(inline_keyboard=[ 
     [InlineKeyboardButton(text="📬 Заявки", callback_data="view_applications")], 
