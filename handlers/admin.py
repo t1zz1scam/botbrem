@@ -15,8 +15,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # Клавиатура админ-панели
-admin_panel_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="📬 Заявки", callback_data="view_applications")],
+admin_panel_kb = InlineKeyboardMarkup(inline_keyboard=[ 
+    [InlineKeyboardButton(text="📬 Заявки", callback_data="view_applications")], 
     [InlineKeyboardButton(text="👥 Список пользователей", callback_data="view_users")],
     [InlineKeyboardButton(text="➕ Назначить админа", callback_data="assign_admin")],
     [InlineKeyboardButton(text="🔧 Изменить ранг пользователя", callback_data="change_rank")],
@@ -52,6 +52,8 @@ async def admin_panel(message: types.Message):
 # 1) Просмотр заявок
 @router.callback_query(F.data == "view_applications")
 async def view_applications(callback: types.CallbackQuery):
+    await callback.answer()  # Добавлен срочный ответ для Telegram
+
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         logger.warning(f"User {callback.from_user.id} tried to view applications without admin rights.")
@@ -72,7 +74,7 @@ async def view_applications(callback: types.CallbackQuery):
             f"Сообщение:\n{app.message}\n\n"
             f"Статус: {app.status}"
         )
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[ 
             [
                 InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{app.id}"),
                 InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{app.id}")
@@ -85,6 +87,8 @@ async def view_applications(callback: types.CallbackQuery):
 # 2) Просмотр списка пользователей
 @router.callback_query(F.data == "view_users")
 async def view_users(callback: types.CallbackQuery):
+    await callback.answer()  # Добавлен срочный ответ для Telegram
+
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         logger.warning(f"User {callback.from_user.id} tried to view users without admin rights.")
@@ -109,6 +113,8 @@ async def view_users(callback: types.CallbackQuery):
 # 3) Назначение админа (только супер-админ)
 @router.callback_query(F.data == "assign_admin")
 async def assign_admin_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()  # Добавлен срочный ответ для Telegram
+
     if not await is_superadmin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         logger.warning(f"User {callback.from_user.id} tried to assign admin without superadmin rights.")
@@ -120,13 +126,11 @@ async def assign_admin_start(callback: types.CallbackQuery, state: FSMContext):
 @router.message(F.state == "assign_admin_waiting_for_user_id")
 async def assign_admin_confirm(message: types.Message, state: FSMContext):
     try:
-        user_id = int(message.text)  # Преобразуем введенный текст в ID
+        user_id = int(message.text)
     except ValueError:
-        await message.answer("Введите корректный ID пользователя.")  # В случае ошибки
+        await message.answer("Введите корректный ID пользователя.")
         logger.error(f"Invalid user ID input by {message.from_user.id}: {message.text}")
-        return  # Ожидаем корректный ввод
-
-    # Проверка существования пользователя
+        return
     async with SessionLocal() as session:
         user = await session.get(User, user_id)
         if not user:
@@ -138,7 +142,7 @@ async def assign_admin_confirm(message: types.Message, state: FSMContext):
             await session.commit()
             await message.answer(f"Пользователь {user_id} назначен администратором.")
             logger.info(f"User {message.from_user.id} assigned admin role to user {user_id}.")
-    await state.clear()  # Очищаем состояние после завершения
+    await state.clear()
 
 # 4) Смена ранга пользователя
 RANKS = {
@@ -149,6 +153,8 @@ RANKS = {
 
 @router.callback_query(F.data == "change_rank")
 async def change_rank_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()  # Добавлен срочный ответ для Telegram
+
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         logger.warning(f"User {callback.from_user.id} tried to change rank without admin rights.")
@@ -162,22 +168,19 @@ async def change_rank_user_id(message: types.Message, state: FSMContext):
     try:
         user_id = int(message.text)
     except ValueError:
-        await message.answer("Введите корректный ID пользователя.")  # В случае ошибки
+        await message.answer("Введите корректный ID пользователя.")
         logger.error(f"Invalid user ID input by {message.from_user.id}: {message.text}")
         return
-
-    # Если пользователь найден, продолжаем
     async with SessionLocal() as session:
         user = await session.get(User, user_id)
         if not user:
             await message.answer("Пользователь не найден.")
-            await state.clear()  # Очистим состояние, чтобы не сбить дальнейшие переходы
+            await state.clear()
             logger.warning(f"User {user_id} not found for admin {message.from_user.id}.")
             return
-
         await message.answer(f"Выберите ранг для пользователя {user_id}:\n" + "\n".join(RANKS.keys()))
         await state.update_data(user_id=user_id)
-        await state.set_state("change_rank_waiting_for_rank")  # Переход к следующему состоянию
+        await state.set_state("change_rank_waiting_for_rank")
 
 @router.message(F.state == "change_rank_waiting_for_rank")
 async def change_rank_select(message: types.Message, state: FSMContext):
@@ -186,11 +189,8 @@ async def change_rank_select(message: types.Message, state: FSMContext):
         await message.answer(f"Неверный ранг. Выберите из: {', '.join(RANKS.keys())}")
         logger.error(f"Invalid rank selection by {message.from_user.id}: {rank}")
         return
-
     data = await state.get_data()
     user_id = data.get("user_id")
-
-    # Изменяем ранг пользователя
     async with SessionLocal() as session:
         user = await session.get(User, user_id)
         if user:
@@ -204,6 +204,8 @@ async def change_rank_select(message: types.Message, state: FSMContext):
 # 5) Выдача и вычитание выплат
 @router.callback_query(F.data == "manage_payout")
 async def manage_payout_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()  # Добавлен срочный ответ для Telegram
+
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         logger.warning(f"User {callback.from_user.id} tried to manage payouts without admin rights.")
@@ -260,6 +262,8 @@ async def payout_get_amount(message: types.Message, state: FSMContext):
 # 6) Бан и заморозка пользователя
 @router.callback_query(F.data == "ban_user")
 async def ban_user_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()  # Добавлен срочный ответ для Telegram
+
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         logger.warning(f"User {callback.from_user.id} tried to ban user without admin rights.")
@@ -312,6 +316,8 @@ async def ban_user_set_days(message: types.Message, state: FSMContext):
 # 7) Постинг в бота
 @router.callback_query(F.data == "post_bot")
 async def post_bot_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()  # Добавлен срочный ответ для Telegram
+
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         logger.warning(f"User {callback.from_user.id} tried to post in bot without admin rights.")
@@ -331,6 +337,8 @@ async def post_bot_send(message: types.Message, state: FSMContext):
 # 8) Постинг в канал
 @router.callback_query(F.data == "post_channel")
 async def post_channel_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()  # Добавлен срочный ответ для Telegram
+
     if not await is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         logger.warning(f"User {callback.from_user.id} tried to post in channel without admin rights.")
