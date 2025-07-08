@@ -40,7 +40,7 @@ async def run_migrations():
     - Добавление колонки user_rank, если её нет
     """
     async with engine.begin() as conn:
-        await conn.execute(text("""
+        await conn.execute(text(""" 
         DO $$
         BEGIN
             -- bigint миграции
@@ -107,6 +107,7 @@ async def run_migrations():
         $$;
         """))
 
+
 # Запускается при старте FastAPI
 @app.on_event("startup")
 async def on_startup():
@@ -114,6 +115,7 @@ async def on_startup():
     await run_migrations()
     logging.info("✅ Миграции выполнены")
     logging.info("🚀 Бот готов к приему запросов!")
+
 
 # Webhook для Telegram
 @app.post("/bot-webhook")
