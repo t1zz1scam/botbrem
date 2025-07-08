@@ -28,18 +28,12 @@ admin_panel_kb = InlineKeyboardMarkup(inline_keyboard=[
 
 # Утилиты проверки роли
 async def is_admin(user_id: int):
-    """
-    Проверка, является ли пользователь администратором.
-    """
     async with SessionLocal() as session:
         result = await session.execute(select(User).where(User.user_id == user_id))
         user = result.scalar_one_or_none()
         return user and user.role in ("admin", "superadmin")
 
 async def is_superadmin(user_id: int):
-    """
-    Проверка, является ли пользователь супер-администратором.
-    """
     async with SessionLocal() as session:
         result = await session.execute(select(User).where(User.user_id == user_id))
         user = result.scalar_one_or_none()
@@ -48,9 +42,6 @@ async def is_superadmin(user_id: int):
 # Показываем админ-панель
 @router.message(F.text == "🛠 Админ-панель")
 async def admin_panel(message: types.Message):
-    """
-    Команда для доступа к админ-панели.
-    """
     if not await is_admin(message.from_user.id):
         await message.answer("❌ У вас нет прав администратора.")
         logger.warning(f"User {message.from_user.id} tried to access admin panel without permissions.")
@@ -61,9 +52,6 @@ async def admin_panel(message: types.Message):
 # 1) Просмотр заявок
 @router.callback_query(F.data == "view_applications")
 async def view_applications(callback: types.CallbackQuery):
-    """
-    Просмотр заявок с кнопками для одобрения или отклонения.
-    """
     await callback.answer()
 
     if not await is_admin(callback.from_user.id):
@@ -79,7 +67,6 @@ async def view_applications(callback: types.CallbackQuery):
         logger.info(f"No new applications available for {callback.from_user.id}.")
         return
 
-    # Отображаем каждую заявку с возможностью принять или отклонить
     for app in applications:
         text = (
             f"<b>Заявка от пользователя {app.user_id}</b>\n\n"
@@ -99,9 +86,6 @@ async def view_applications(callback: types.CallbackQuery):
 # 3) Назначение админа (только супер-админ)
 @router.callback_query(F.data == "assign_admin")
 async def assign_admin_start(callback: types.CallbackQuery, state: FSMContext):
-    """
-    Запуск процесса назначения пользователя администратором (только для супер-админа).
-    """
     await callback.answer()
 
     if not await is_superadmin(callback.from_user.id):
@@ -115,8 +99,16 @@ async def assign_admin_start(callback: types.CallbackQuery, state: FSMContext):
 async def assign_admin_confirm(message: types.Message, state: FSMContext):
     """
     Подтверждение назначения админа по ID пользователя.
+    Обрабатываем ID, игнорируя тип сущности.
     """
+    # Извлекаем только текст без сущностей
     user_id = message.text.strip()
+    
+    # Если текст был распознан как номер телефона, убираем его
+    if message.entities:
+        # Если есть сущности, проверяем, что это номер телефона
+        if message.entities[0].type == 'phone_number':
+            user_id = user_id.replace(message.text, '').strip()
     
     # Проверяем, что введен числовой ID
     if not user_id.isdigit():
